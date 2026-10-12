@@ -1,0 +1,55 @@
+{
+  "dependency_preparation": {
+    "ci_dependency_bytes_match": true,
+    "lifecycle_scripts": false,
+    "locked_ci": "PASS",
+    "node": "v24.18.0",
+    "npm": "10.5.0",
+    "offline": true
+  },
+  "generated_build_preview": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\build-preview\\dist",
+  "host_token": {
+    "appcontainer": false,
+    "elevated": false
+  },
+  "limitations": [
+    "No browser/server or Dellbox validation; private hosting is future work.",
+    "Qualified Vite wrapper only; project Vite/PostCSS configuration, child-process builds, minification and custom plugins remain unqualified.",
+    "Replay profile pins disposable tools for inspection, grants no execution authority, and differs in paths from the executed profile."
+  ],
+  "next_owner_action": "Review the scaffold, pinned tooling and validation evidence; decide the next phase separately. Git and enrollment remain owner actions.",
+  "restrictions": {
+    "coding_grants": 0,
+    "dellbox_access": false,
+    "development_servers_started": 0,
+    "elevation": false,
+    "git_mutations": 0,
+    "oauth": false,
+    "project_enrollments": 0,
+    "provider_calls": 0,
+    "studio_installation_changes": 0
+  },
+  "retained_disposable_tools": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece",
+  "scope": "Phase 7B Family Calendar preparation only",
+  "staged_scaffold": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\scaffold",
+  "status": "PASS",
+  "target": "C:\\Users\\nickb\\Code\\Repositories\\FamilyCalendar",
+  "validation": {
+    "appcontainer_probes": "PASS",
+    "css_error_rejected": "PASS",
+    "existing_tests": {
+      "failed": 0,
+      "passed": 7,
+      "skipped": 0,
+      "suites": [
+        "ViteProfileTests",
+        "NodeIsolationAcceptance"
+      ]
+    },
+    "inputs_immutable": true,
+    "profile_cleanup_confirmed": true,
+    "typescript": "PASS",
+    "typescript_error_rejected": "PASS",
+    "vite": "PASS"
+  }
+}

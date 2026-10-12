@@ -1,0 +1,12 @@
+test_generated_output_manifest_is_exact_and_excludes_inputs (tests.test_development_vite.ViteProfileTests.test_generated_output_manifest_is_exact_and_excludes_inputs) ... ok
+test_profile_denies_unqualified_versions_and_tool_replacement (tests.test_development_vite.ViteProfileTests.test_profile_denies_unqualified_versions_and_tool_replacement) ... ok
+test_profile_pins_tool_and_keeps_single_process_root_commands (tests.test_development_vite.ViteProfileTests.test_profile_pins_tool_and_keeps_single_process_root_commands) ... ok
+test_profile_requires_exclusive_fixture_and_denies_bundle_scope_escape (tests.test_development_vite.ViteProfileTests.test_profile_requires_exclusive_fixture_and_denies_bundle_scope_escape) ... ok
+test_project_dependency_substitution_rejected_before_export (tests.test_development_vite.ViteProfileTests.test_project_dependency_substitution_rejected_before_export) ... ok
+test_runtime_dependency_drift_is_rejected_before_export (tests.test_development_vite.ViteProfileTests.test_runtime_dependency_drift_is_rejected_before_export) ... ok
+test_named_pipe_hang_is_bounded_and_job_cancellation_cleanup_remain_effective (tests.test_development_vite.NodeIsolationAcceptance.test_named_pipe_hang_is_bounded_and_job_cancellation_cleanup_remain_effective) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 8.575s
+
+OK

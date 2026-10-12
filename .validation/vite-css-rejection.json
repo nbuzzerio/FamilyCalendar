@@ -1,0 +1,100 @@
+{
+  "generated_output": {
+    "files": {},
+    "paths": [
+      "dist"
+    ],
+    "schema_version": 1,
+    "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  "input_immutability_confirmed": true,
+  "isolation": {
+    "checks": {
+      "loopback_network": true,
+      "network": true,
+      "outside_read": true,
+      "outside_write": true,
+      "scratch": true
+    },
+    "exit_code": 0,
+    "network_no_delivery": true,
+    "process_policy": "appcontainer_single_process_node_v1",
+    "status": "COMPLETED",
+    "stderr": "NODE_NETWORK_ERROR:ETIMEDOUT\n"
+  },
+  "passed": false,
+  "profile_cleanup_confirmed": true,
+  "profile_sha256": "274b6703c585ab1bda6082ad10d99c0062fcc13602e5ced29e70542d0c4c20d0",
+  "project_sha256": "1a1a77b7c5ad15dabfd3825300297ebbcfde14452de2957af39bc751393a91f9",
+  "results": [
+    {
+      "command": {
+        "argv": [
+          "node_modules/typescript/bin/tsc",
+          "--noEmit"
+        ],
+        "command_id": "typecheck",
+        "cwd_relative": ".",
+        "executable": "C:\\Users\\nickb\\AppData\\Roaming\\nvm\\v24.18.0\\node.exe",
+        "executable_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
+        "retained_output_bytes": 65536,
+        "timeout_seconds": 60
+      },
+      "ended_at": "2026-10-12T13:30:14.135+00:00",
+      "error_code": null,
+      "exit_code": 0,
+      "pid": 10348,
+      "started_at": "2026-10-12T13:30:13.738+00:00",
+      "status": "COMPLETED",
+      "stderr": {
+        "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": "",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdin_write_complete": true,
+      "stdout": {
+        "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": "",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    },
+    {
+      "command": {
+        "argv": [
+          "studio-tools/vite-build.mjs"
+        ],
+        "command_id": "vite-build",
+        "cwd_relative": ".",
+        "executable": "C:\\Users\\nickb\\AppData\\Roaming\\nvm\\v24.18.0\\node.exe",
+        "executable_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
+        "retained_output_bytes": 65536,
+        "timeout_seconds": 60
+      },
+      "ended_at": "2026-10-12T13:30:14.611+00:00",
+      "error_code": null,
+      "exit_code": 1,
+      "pid": 16928,
+      "started_at": "2026-10-12T13:30:14.256+00:00",
+      "status": "COMPLETED",
+      "stderr": {
+        "retained_sha256": "362a75a3a3fd7825bd0bbcb7b479a707781505bf169bacc626d06738dd43fe63",
+        "sha256": "362a75a3a3fd7825bd0bbcb7b479a707781505bf169bacc626d06738dd43fe63",
+        "text": "\u001b[31m\u2717\u001b[39m Build failed in 81ms\nnode:internal/modules/run_main:107\r\n    triggerUncaughtException(\r\n    ^\r\n\r\n\u001b[31m[vite:css] [postcss] C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css:1:55: Unclosed comment\u001b[39m\r\nfile: \u001b[36mC:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css:1:54\u001b[39m\r\n    at Input.error (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\input.js:135:16)\r\n    at unclosed (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\tokenize.js:46:17)\r\n    at Object.nextToken (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\tokenize.js:232:15)\r\n    at Parser.parse (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\parser.js:454:30)\r\n    at parse (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\parse.js:11:12)\r\n    at new LazyResult (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\lazy-result.js:171:16)\r\n    at Processor.process (C:\\Users\\nickb\\AppData\\Local\\Temp\\studio-owner-fixture-lo_wua3b\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\node_modules\\postcss\\lib\\processor.js:53:14)\r\n    at runPostCSS (file:///C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/node_modules/vite/dist/node/chunks/config.js:30225:68)\r\n    at async compilePostCSS (file:///C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/node_modules/vite/dist/node/chunks/config.js:30209:6)\r\n    at async compileCSS (file:///C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/node_modules/vite/dist/node/chunks/config.js:30139:26) {\r\n  name: 'CssSyntaxError',\r\n  reason: 'Unclosed comment',\r\n  file: 'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css',\r\n  source: 'main { color: blue; background: url(\"./missing.svg\"); /* unclosed\\n',\r\n  line: 1,\r\n  column: 55,\r\n  input: {\r\n    column: 55,\r\n    endColumn: undefined,\r\n    endLine: undefined,\r\n    endOffset: undefined,\r\n    line: 1,\r\n    offset: 54,\r\n    source: 'main { color: blue; background: url(\"./missing.svg\"); /* unclosed\\n',\r\n    url: 'file:///C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css',\r\n    file: 'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css'\r\n  },\r\n  code: 'PLUGIN_ERROR',\r\n  loc: {\r\n    file: 'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css',\r\n    line: 1,\r\n    column: 54\r\n  },\r\n  pluginCode: 'main { color: blue; background: url(\"./missing.svg\"); /* unclosed\\n',\r\n  plugin: 'vite:css',\r\n  hook: 'transform',\r\n  id: 'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css',\r\n  watchFiles: [\r\n    'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/index.html',\r\n    'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/main.tsx',\r\n    'C:\\\\Users\\\\nickb\\\\AppData\\\\Local\\\\Temp\\\\studio-owner-fixture-lo_wua3b\\\\node-validation-a8d6027761cf4687be1688fd51ac34b3\\\\package.json',\r\n    'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/node_modules/react/cjs/react-jsx-runtime.production.js',\r\n    'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/node_modules/react/cjs/react.production.js',\r\n    'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/App.tsx',\r\n    'C:/Users/nickb/AppData/Local/Temp/studio-owner-fixture-lo_wua3b/node-validation-a8d6027761cf4687be1688fd51ac34b3/src/style.css'\r\n  ]\r\n}\r\n\r\nNode.js v24.18.0\r\n",
+        "total_bytes": 4662,
+        "truncated": false
+      },
+      "stdin_write_complete": true,
+      "stdout": {
+        "retained_sha256": "f66e77e22969739d975248f93bb5bda834e5a6356fb248eeee54af334bf729f1",
+        "sha256": "f66e77e22969739d975248f93bb5bda834e5a6356fb248eeee54af334bf729f1",
+        "text": "\u001b[36mvite v7.3.6 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m\u2713\u001b[39m 7 modules transformed.\n",
+        "total_bytes": 131,
+        "truncated": false
+      }
+    }
+  ]
+}

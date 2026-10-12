@@ -1,0 +1,124 @@
+{
+  "copy_hash_verification": "PASS",
+  "files": {
+    ".gitignore": {
+      "bytes": 71,
+      "sha256": "203ac358fc46e3fc80461ca2642c520dbca3978c002b26e547a3a7dc393acad6"
+    },
+    ".node-version": {
+      "bytes": 8,
+      "sha256": "55075b5ec4e8b31936cbbc282b8829116d1fd48f2f2f1856dee592a6650700ce"
+    },
+    ".npmrc": {
+      "bytes": 78,
+      "sha256": "df4c8a22b39cf906a77a8311222c13b998fbbab1d9ef2f532013a8458b48ab07"
+    },
+    ".validation/executed-profile.json": {
+      "bytes": 57658,
+      "sha256": "9ecb3177b3dd5d4806a3a54ed7de84dc5f97221e5e7e576b3a5d5425a8398d70"
+    },
+    ".validation/existing-tests.stderr.log": {
+      "bytes": 1393,
+      "sha256": "4584985eeb878f5545df541ca8a64301930fc2449966597aa08d5b4287f3187b"
+    },
+    ".validation/existing-tests.stdout.log": {
+      "bytes": 99,
+      "sha256": "e4b278d8be2916e49cb644ef330e35a2e3c498f9e3f64b36fa2ed8b7365a1c83"
+    },
+    ".validation/lock-preparation.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    ".validation/lock-preparation.stdout.log": {
+      "bytes": 21,
+      "sha256": "3de2b4cf483d5123583ad562e0f121561a0f8aaac3a0ca970daeb2477107b80b"
+    },
+    ".validation/locked-offline-ci.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    ".validation/locked-offline-ci.stdout.log": {
+      "bytes": 28,
+      "sha256": "682eb393be6e3643b96806035ecea50466f536d1831999bb83df9ded1ff06b18"
+    },
+    ".validation/preparation-history.json": {
+      "bytes": 641,
+      "sha256": "3de488b4dbce947994046bcbe904c52e765cd10e2b3c0fb613d62dc29d1beb29"
+    },
+    ".validation/replay-profile.json": {
+      "bytes": 58057,
+      "sha256": "e47fb54f014ea987626b9ec4821f60359b78774f31eeb795537b4770e2132731"
+    },
+    ".validation/report.json": {
+      "bytes": 2230,
+      "sha256": "6b5d852def25e8dcf87e5c5d1cb91bb64e628ef24d269e7df6a3f66cfd732a27"
+    },
+    ".validation/scaffold.json": {
+      "bytes": 4711,
+      "sha256": "b287a8328625edda4f6bdf8d9433bd04facc22d87112320afd7211ab4e2c0383"
+    },
+    ".validation/typescript-rejection.json": {
+      "bytes": 2190,
+      "sha256": "c1dc56504d114897a55a7445c58d1f7a66d22b0fcbfa778a4eb3a267051fda92"
+    },
+    ".validation/validated-source.json": {
+      "bytes": 1662,
+      "sha256": "a029250d2fe9dec4f4792ae07f79e41b093d72113285850e358cf44b10c923b7"
+    },
+    ".validation/vite-css-rejection.json": {
+      "bytes": 8403,
+      "sha256": "d279a44c97bfa2c3aecacea1732c1b6c9f7148c1de691c9d918369d8b9a95021"
+    },
+    "README.md": {
+      "bytes": 2741,
+      "sha256": "5ec4a87096bd746779836117fc8982a66a5035d17e623919fa0e9fa778ed7fb6"
+    },
+    "index.html": {
+      "bytes": 302,
+      "sha256": "6904d3626ad5f1cecee1dae8afb017d093fe64739aabc542296eec251ad213f1"
+    },
+    "package-lock.json": {
+      "bytes": 12787,
+      "sha256": "1a820e0eb96a67823ea1ccf617b34510dcb27da0050fc5bfcd2fbab8c6ce6007"
+    },
+    "package.json": {
+      "bytes": 640,
+      "sha256": "8a8b437357f1f723aa92fa40a47751896480a6392ac3c6b839409324ed25f0ce"
+    },
+    "src/App.tsx": {
+      "bytes": 144,
+      "sha256": "c66a9c745cbcc0cf914090df7da21225b765e9270404990e24f78e7bcaad0695"
+    },
+    "src/main.tsx": {
+      "bytes": 235,
+      "sha256": "0ddcfd9a7ccf142be7ff822ef666f23beb2012a0e0af0d26a407858cc2ee92b6"
+    },
+    "src/style.css": {
+      "bytes": 175,
+      "sha256": "84d309f6a49cddfe114e9193f81714c759ef107a3c8138e0172e55654f3fad4c"
+    },
+    "src/vite-env.d.ts": {
+      "bytes": 38,
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+    },
+    "studio-tools/vite-build.mjs": {
+      "bytes": 3647,
+      "sha256": "0123855f194127a493cab4c61bd5d4bc358b2eff8defb46d47daa4096a658fdf"
+    },
+    "tooling-pins.json": {
+      "bytes": 1194,
+      "sha256": "43c818e5c0cdec0df22db0d587379ec08740283eb9c473f82f69beaf06b0331e"
+    },
+    "tsconfig.json": {
+      "bytes": 378,
+      "sha256": "e9ed7b602ded84d00aaed21d27ef6c1b85d3ec2ec0735329b1dd3f4709883482"
+    }
+  },
+  "git_mutations": 0,
+  "non_elevated": true,
+  "receipt_scope": "Preparation file inventory for review; not enrollment or execution authority.",
+  "status": "PASS",
+  "studio_git_status_after": "",
+  "studio_git_status_before": "",
+  "target": "C:\\Users\\nickb\\Code\\Repositories\\FamilyCalendar"
+}

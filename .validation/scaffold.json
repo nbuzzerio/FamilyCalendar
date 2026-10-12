@@ -1,0 +1,117 @@
+{
+  "generated_output": {
+    "files": {
+      "dist/.vite/manifest.json": {
+        "bytes": 185,
+        "sha256": "93f3c266f36f92d21cf0c2101c20aa8f05268766479416970d654faaf26aced6"
+      },
+      "dist/assets/index-CJY3vTDD.js": {
+        "bytes": 592939,
+        "sha256": "2f1ad41513185c43ed9726ffa27fc547a0f4392d6dd092a3aee3cc41fa073e0b"
+      },
+      "dist/assets/index-DI-tVLxS.css": {
+        "bytes": 175,
+        "sha256": "84d309f6a49cddfe114e9193f81714c759ef107a3c8138e0172e55654f3fad4c"
+      },
+      "dist/index.html": {
+        "bytes": 402,
+        "sha256": "8b322c8043d9faaeb39eca3144689bc1c2f257852cb7f1d79e905eb03ff6b5b9"
+      }
+    },
+    "paths": [
+      "dist"
+    ],
+    "schema_version": 1,
+    "sha256": "7a821b40e86ffcc6b1b5c5da7c82c43143f11b660547fcc54047e07189f9e565"
+  },
+  "input_immutability_confirmed": true,
+  "isolation": {
+    "checks": {
+      "loopback_network": true,
+      "network": true,
+      "outside_read": true,
+      "outside_write": true,
+      "scratch": true
+    },
+    "exit_code": 0,
+    "network_no_delivery": true,
+    "process_policy": "appcontainer_single_process_node_v1",
+    "status": "COMPLETED",
+    "stderr": "NODE_NETWORK_ERROR:ETIMEDOUT\n"
+  },
+  "passed": true,
+  "profile_cleanup_confirmed": true,
+  "profile_sha256": "274b6703c585ab1bda6082ad10d99c0062fcc13602e5ced29e70542d0c4c20d0",
+  "project_sha256": "884de2a0ae6e0fab532473ae9c6484567335f75e470d5ad7e90b9f1f45cf66ba",
+  "results": [
+    {
+      "command": {
+        "argv": [
+          "node_modules/typescript/bin/tsc",
+          "--noEmit"
+        ],
+        "command_id": "typecheck",
+        "cwd_relative": ".",
+        "executable": "C:\\Users\\nickb\\AppData\\Roaming\\nvm\\v24.18.0\\node.exe",
+        "executable_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
+        "retained_output_bytes": 65536,
+        "timeout_seconds": 60
+      },
+      "ended_at": "2026-10-12T13:29:55.016+00:00",
+      "error_code": null,
+      "exit_code": 0,
+      "pid": 9040,
+      "started_at": "2026-10-12T13:29:54.619+00:00",
+      "status": "COMPLETED",
+      "stderr": {
+        "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": "",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdin_write_complete": true,
+      "stdout": {
+        "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": "",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    },
+    {
+      "command": {
+        "argv": [
+          "studio-tools/vite-build.mjs"
+        ],
+        "command_id": "vite-build",
+        "cwd_relative": ".",
+        "executable": "C:\\Users\\nickb\\AppData\\Roaming\\nvm\\v24.18.0\\node.exe",
+        "executable_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
+        "retained_output_bytes": 65536,
+        "timeout_seconds": 60
+      },
+      "ended_at": "2026-10-12T13:29:55.808+00:00",
+      "error_code": null,
+      "exit_code": 0,
+      "pid": 35036,
+      "started_at": "2026-10-12T13:29:55.139+00:00",
+      "status": "COMPLETED",
+      "stderr": {
+        "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": "",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdin_write_complete": true,
+      "stdout": {
+        "retained_sha256": "945f12f6f85fa7714cfa41a82a29df555942deb65f1bd9f69b643b6aec960254",
+        "sha256": "945f12f6f85fa7714cfa41a82a29df555942deb65f1bd9f69b643b6aec960254",
+        "text": "\u001b[36mvite v7.3.6 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m\u2713\u001b[39m 19 modules transformed.\nrendering chunks...\n\u001b[2mdist/\u001b[22m\u001b[32m.vite/manifest.json        \u001b[39m\u001b[1m\u001b[2m  0.19 kB\u001b[22m\u001b[1m\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[32mindex.html                 \u001b[39m\u001b[1m\u001b[2m  0.40 kB\u001b[22m\u001b[1m\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[35massets/index-DI-tVLxS.css  \u001b[39m\u001b[1m\u001b[2m  0.18 kB\u001b[22m\u001b[1m\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[36massets/index-CJY3vTDD.js   \u001b[39m\u001b[1m\u001b[33m592.94 kB\u001b[39m\u001b[22m\n\u001b[32m\u2713 built in 383ms\u001b[39m\nSTUDIO_VITE_BUILD_V1:complete\n",
+        "total_bytes": 540,
+        "truncated": false
+      }
+    }
+  ]
+}

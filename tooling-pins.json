@@ -1,0 +1,21 @@
+{
+  "dependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  },
+  "dependency_lock_sha256": "1a820e0eb96a67823ea1ccf617b34510dcb27da0050fc5bfcd2fbab8c6ce6007",
+  "node_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
+  "node_version": "24.18.0",
+  "npm_cli_sha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+  "npm_version": "10.5.0",
+  "qualified_process_policy": "appcontainer_single_process_node_v1",
+  "retained_disposable_bundle": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\tool-bundle",
+  "retained_disposable_runtime": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\runtime\\node.exe",
+  "schema_version": 1,
+  "tool_inventory_sha256": "a5ff218b6e01db24ed40022848a3cc14ff500b89094a468923d6b5c9d7d23765",
+  "vite_wrapper_sha256": "0123855f194127a493cab4c61bd5d4bc358b2eff8defb46d47daa4096a658fdf"
+}
