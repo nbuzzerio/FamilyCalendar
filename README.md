@@ -1,8 +1,30 @@
 # Family Calendar
 
 Minimal React/Vite/TypeScript scaffold prepared on Windows for Phase 7B review.
-The eventual private Dellbox deployment is future work. This placeholder has no
-calendar storage, authentication, backend, server integration or hosting setup.
+The eventual private Dellbox deployment is future work. Events are stored in this
+browser's localStorage; there is no authentication, backend, sync or hosting setup.
+
+## Events
+
+Use Add event to create an event with a title, local calendar date, and optional
+local time. Leave time blank for an all-day event. The weekly calendar displays
+events on their saved dates, with all-day events first, followed by timed events
+in ascending time order. Existing date-only events remain all-day events. Upcoming
+and past events have Edit and Delete controls. Events survive refresh in the same
+browser profile. Clearing browser storage removes them. Storage failures display
+an error without reporting a successful save.
+
+Use Previous week and Next week to browse the calendar, or This week to return
+to the current week. Edit and Delete controls are available on calendar events
+and event lists. Editing focuses the form; Save event persists the changes, while
+Cancel leaves the saved event unchanged. Upcoming Events always shows saved events
+from today onward, ordered by date and time, independently of the selected week.
+
+`src/events.ts` exports the typed event model and a store with `create`, `update`,
+`delete` and `list` operations. Dates stay as `YYYY-MM-DD` strings without UTC
+conversion. Invalid stored JSON is treated as empty; invalid or duplicate records
+are skipped. `npm test` exercises persistence, CRUD, validation and storage errors
+using Node's built-in runner without additional dependencies.
 
 ## Pinned tools
 
