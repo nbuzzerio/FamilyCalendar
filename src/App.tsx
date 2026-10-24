@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { dateKey, eventStore, type CalendarEvent } from "./events";
 import { upcomingEvents, weekDays } from "./calendar";
+import { labelStore, labelTextColor } from "./labels";
+import { LabelManager } from "./LabelManager";
 
 export function App() {
   const [events, setEvents] = useState(() => eventStore.list());
+  const [labels, setLabels] = useState(() => labelStore.list());
+  const [labelId, setLabelId] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [eventDate, setEventDate] = useState(() => dateKey(new Date()));
   const [eventTime, setEventTime] = useState("");
+  const [notes, setNotes] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
   const titleInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const refresh = () => setEvents(eventStore.list());
+    const refresh = () => { setEvents(eventStore.list()); setLabels(labelStore.list()); };
     window.addEventListener("storage", refresh);
     return () => window.removeEventListener("storage", refresh);
   }, []);
@@ -33,21 +38,38 @@ export function App() {
     return <div className="event-actions">
       <button type="button" onClick={() => {
         setEditing(event.id); setTitle(event.title); setEventDate(event.date); setEventTime(event.time ?? "");
+        setNotes(event.notes ?? "");
+        setLabelId(labels.some(label => label.id === event.labelId) ? event.labelId! : "");
         setNotice(""); setError("");
         titleInput.current?.focus();
       }} aria-label={`Edit ${event.title}`}>Edit</button>
       <button type="button" onClick={() => {
+        if (!window.confirm(`Delete "${event.title}"? This cannot be undone.`)) return;
         if (mutate(() => eventStore.delete(event.id))) {
-          if (editing === event.id) { setEditing(null); setTitle(""); setEventTime(""); }
+          if (editing === event.id) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); }
           setNotice("Event deleted.");
         }
       }} aria-label={`Delete ${event.title}`}>Delete</button>
     </div>;
   }
+  function eventNotes(event: CalendarEvent) {
+    return event.notes?.trim() ? <details className="event-notes">
+      <summary>Notes<span className="visually-hidden"> for {event.title}</span></summary>
+      <p>{event.notes}</p>
+    </details> : null;
+  }
+  function eventLabel(event: CalendarEvent) {
+    const label = labels.find(label => label.id === event.labelId);
+    return label ? <span className="label-badge" style={{ backgroundColor: label.color, color: labelTextColor(label.color) }}>
+      {label.kind}: {label.name}
+    </span> : null;
+  }
   function renderEvent(event: CalendarEvent) {
     return <li key={event.id}>
       <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.date} · {event.time ?? "All day"}</time> {event.title}{" "}
       {eventActions(event)}
+      {eventLabel(event)}
+      {eventNotes(event)}
     </li>;
   }
   const today = new Date();
@@ -88,7 +110,9 @@ export function App() {
                     <li key={event.id}>
                       <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.time ?? "All day"}</time>
                       <span>{event.title}</span>
+                      {eventLabel(event)}
                       {eventActions(event)}
+                      {eventNotes(event)}
                     </li>)}</ul> :
                   <p className="day-empty">No events scheduled</p>}
               </li>
@@ -106,17 +130,26 @@ export function App() {
         <form className="event-form" onSubmit={event => {
           event.preventDefault();
           if (mutate(() => {
-            const input = { title, date: eventDate, ...(eventTime ? { time: eventTime } : {}) };
+            const input = { title, date: eventDate, notes, ...(labels.some(label => label.id === labelId) ? { labelId } : {}), ...(eventTime ? { time: eventTime } : {}) };
             if (editing) eventStore.update(editing, input);
             else eventStore.create(input);
-          })) { setEditing(null); setTitle(""); setEventTime(""); setNotice(editing ? "Event updated." : "Event added."); }
+          })) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setNotice(editing ? "Event updated." : "Event added."); }
         }}>
           <label>Title <input ref={titleInput} required value={title} onChange={event => setTitle(event.target.value)} /></label>{" "}
           <label>Date <input required type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} /></label>{" "}
           <label>Time (optional) <input type="time" value={eventTime} onChange={event => setEventTime(event.target.value)} aria-describedby="event-time-help" /></label>
           <p id="event-time-help" className="form-help">Leave time blank for an all-day event. Times use your local clock.</p>
+          <label>Person or category (optional)
+            <select value={labels.some(label => label.id === labelId) ? labelId : ""} onChange={event => setLabelId(event.target.value)}>
+              <option value="">No label</option>
+              {labels.map(label => <option key={label.id} value={label.id}>{label.kind}: {label.name}</option>)}
+            </select>
+          </label>
+          <label className="notes-field">Notes (optional)
+            <textarea rows={4} value={notes} onChange={event => setNotes(event.target.value)} />
+          </label>
           <button type="submit">{editing ? "Save event" : "Add event"}</button>{" "}
-          {editing && <button type="button" onClick={() => { setEditing(null); setTitle(""); setEventTime(""); setError(""); }}>Cancel</button>}
+          {editing && <button type="button" onClick={() => { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setError(""); }}>Cancel</button>}
         </form>
         {error && <p role="alert">{error}</p>}
         <p role="status">{notice}</p>
@@ -125,6 +158,7 @@ export function App() {
           <ul>{events.filter(event => event.date < dateKey(today)).map(renderEvent)}</ul>
         </>}
       </section>
+      <LabelManager labels={labels} onChange={() => setLabels(labelStore.list())} />
       <section aria-labelledby="planning-tips-heading">
         <h2 id="planning-tips-heading">Planning tips</h2>
         <ul>

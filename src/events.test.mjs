@@ -2,6 +2,84 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createEventStore, dateKey, isLocalDate, isLocalTime, EVENTS_STORAGE_KEY } from "./events.ts";
 import { upcomingEvents, weekDays } from "./calendar.ts";
+import { createLabelStore, LABELS_STORAGE_KEY, labelTextColor } from "./labels.ts";
+
+function labelFixture(initial = null) {
+  let value = initial;
+  const storage = {
+    getItem(key) { assert.equal(key, LABELS_STORAGE_KEY); return value; },
+    setItem(key, next) { assert.equal(key, LABELS_STORAGE_KEY); value = next; },
+  };
+  return { storage, store: createLabelStore(() => storage) };
+}
+
+test("person and category labels persist and support renaming, color editing, and deletion", () => {
+  const { store, storage } = labelFixture();
+  const person = store.create({ name: " Alex ", kind: "Person", color: "#123456" });
+  const category = store.create({ name: "School", kind: "Category", color: "#ffee00" });
+  assert.equal(person.name, "Alex");
+  const refreshed = createLabelStore(() => storage);
+  assert.deepEqual(refreshed.list(), [person, category]);
+  const updated = refreshed.update(person.id, { name: "Alexandra", kind: "Person", color: "#ffffff" });
+  assert.equal(updated.id, person.id);
+  assert.deepEqual(store.list(), [updated, category]);
+  store.delete(category.id);
+  assert.deepEqual(createLabelStore(() => storage).list(), [updated]);
+  assert.throws(() => store.update("missing", { name: "X", kind: "Person", color: "#000000" }), /no longer exists/);
+});
+
+test("event label assignment persists, can change or clear, and label deletion keeps events and notes", () => {
+  const labels = labelFixture();
+  const { store, storage } = fixture();
+  const person = labels.store.create({ name: "Alex", kind: "Person", color: "#123456" });
+  const category = labels.store.create({ name: "School", kind: "Category", color: "#ffffff" });
+  const legacy = store.create({ title: "Unlabeled", date: "2026-10-24" });
+  const input = { title: "Meeting", date: "2026-10-24", notes: "Bring forms\nRoom 2", time: "09:00" };
+  const event = store.create({ ...input, labelId: person.id });
+  const refreshed = createEventStore(() => storage);
+  assert.deepEqual(refreshed.list().find(item => item.id === event.id), event);
+  refreshed.update(event.id, { ...input, labelId: category.id });
+  assert.equal(store.list().find(item => item.id === event.id).labelId, category.id);
+  const before = store.list();
+  labels.store.delete(category.id);
+  assert.deepEqual(createEventStore(() => storage).list(), before);
+  assert.equal(labels.store.list().find(label => label.id === category.id), undefined);
+  refreshed.update(event.id, input);
+  assert.deepEqual(store.list().find(item => item.id === event.id), { ...input, id: event.id });
+  assert.deepEqual(store.list().find(item => item.id === legacy.id), legacy);
+  for (const labelId of [null, "", 123, {}]) assert.throws(() => store.create({ ...input, labelId }));
+});
+
+test("invalid label storage is tolerated and invalid labels and failed writes are rejected", () => {
+  for (const raw of ["{", "null", "{}", "42"]) assert.deepEqual(labelFixture(raw).store.list(), []);
+  const valid = { id: "a", name: "Alex", kind: "Person", color: "#123abc" };
+  const invalid = [null, { ...valid, name: " " }, { ...valid, kind: "Other" }, { ...valid, color: "red" }, { ...valid, color: "#abc" }];
+  assert.deepEqual(labelFixture(JSON.stringify([valid, valid, ...invalid])).store.list(), [valid]);
+  const { store } = labelFixture();
+  for (const input of invalid) assert.throws(() => store.create(input));
+  assert.deepEqual(store.list(), []);
+  const unavailable = createLabelStore(() => { throw new Error("denied"); });
+  assert.deepEqual(unavailable.list(), []);
+  assert.throws(() => unavailable.create(valid), /could not be saved/);
+  const full = createLabelStore(() => ({ getItem: () => JSON.stringify([valid]), setItem: () => { throw new Error("quota"); } }));
+  assert.throws(() => full.update(valid.id, valid), /could not be saved/);
+  assert.throws(() => full.delete(valid.id), /could not be saved/);
+  assert.deepEqual(full.list(), [valid]);
+});
+
+test("label text meets WCAG AA contrast for selected colors", () => {
+  for (let value = 0; value <= 0xffffff; value += 7919) {
+    const color = `#${value.toString(16).padStart(6, "0")}`;
+    const channels = [16, 8, 0].map(shift => {
+      const channel = ((value >> shift) & 255) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    const text = labelTextColor(color);
+    const contrast = text === "#000000" ? (luminance + 0.05) / 0.05 : 1.05 / (luminance + 0.05);
+    assert.ok(contrast >= 4.5, `${color} with ${text}`);
+  }
+});
 
 function fixture(initial = null) {
   let value = initial;
@@ -11,6 +89,39 @@ function fixture(initial = null) {
   };
   return { storage, store: createEventStore(() => storage) };
 }
+
+test("multiline notes are created, persisted, edited, and cleared across reloads", () => {
+  const { store, storage } = fixture();
+  const notes = "Bring snacks\n  Meet by the north gate.\n<script>plain text</script>";
+  const event = store.create({ title: "Picnic", date: "2026-10-24", notes });
+  assert.equal(event.notes, notes);
+  assert.equal(JSON.parse(storage.getItem(EVENTS_STORAGE_KEY))[0].notes, notes);
+  const refreshed = createEventStore(() => storage);
+  assert.deepEqual(refreshed.list(), [event]);
+  const updated = refreshed.update(event.id, { title: event.title, date: event.date, notes: "New plan\nBring a blanket" });
+  assert.equal(updated.notes, "New plan\nBring a blanket");
+  assert.deepEqual(createEventStore(() => storage).list(), [updated]);
+  refreshed.update(event.id, { title: event.title, date: event.date, notes: " \n " });
+  assert.equal(Object.hasOwn(store.list()[0], "notes"), false);
+  refreshed.update(event.id, { title: event.title, date: event.date, notes });
+  refreshed.update(event.id, { title: event.title, date: event.date });
+  assert.equal(Object.hasOwn(store.list()[0], "notes"), false);
+});
+
+test("loading notes preserves legacy events and rejects malformed notes", () => {
+  const legacy = { id: "legacy", title: "Existing", date: "2026-10-24" };
+  const withNotes = { ...legacy, id: "notes", title: "With notes", notes: "First line\nSecond line" };
+  const invalid = [null, 42, {}, ["text"]];
+  const { store } = fixture(JSON.stringify([legacy, withNotes, ...invalid.map((notes, index) => ({ ...legacy, id: `bad-${index}`, notes }))]));
+  assert.deepEqual(store.list(), [legacy, withNotes]);
+  store.create({ title: "Another", date: legacy.date });
+  assert.deepEqual(store.list().find(event => event.id === legacy.id), legacy);
+  for (const notes of invalid) {
+    assert.throws(() => store.create({ title: "Invalid", date: legacy.date, notes }));
+    assert.throws(() => store.update(legacy.id, { title: legacy.title, date: legacy.date, notes }));
+  }
+  assert.deepEqual(store.list().find(event => event.id === withNotes.id), withNotes);
+});
 
 test("CRUD persists across store recreation and lists chronologically", () => {
   const { store, storage } = fixture();

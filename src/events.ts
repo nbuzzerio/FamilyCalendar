@@ -5,6 +5,9 @@ export interface CalendarEvent {
   date: string;
   /** Local 24-hour HH:mm; omitted for all-day events and older saved events. */
   time?: string;
+  /** Optional free-form text; line breaks are preserved. */
+  notes?: string;
+  labelId?: string;
 }
 
 export type EventInput = Omit<CalendarEvent, "id">;
@@ -31,12 +34,16 @@ function isEvent(value: unknown): value is CalendarEvent {
   const event = value as Record<string, unknown>;
   return typeof event.id === "string" && event.id.trim().length > 0 &&
     typeof event.title === "string" && event.title.trim().length > 0 && isLocalDate(event.date) &&
-    (event.time === undefined || isLocalTime(event.time));
+    (event.time === undefined || isLocalTime(event.time)) &&
+    (event.notes === undefined || typeof event.notes === "string") &&
+    (event.labelId === undefined || (typeof event.labelId === "string" && !!event.labelId.trim()));
 }
 
 function validate(input: EventInput): EventInput {
   if (!isEvent({ ...input, id: "validation" })) throw new Error("Enter a title, a valid local date, and a valid time if provided.");
-  return { title: input.title.trim(), date: input.date, ...(input.time === undefined ? {} : { time: input.time }) };
+  return { title: input.title.trim(), date: input.date, ...(input.time === undefined ? {} : { time: input.time }),
+    ...(input.notes?.trim() ? { notes: input.notes } : {}),
+    ...(input.labelId === undefined ? {} : { labelId: input.labelId }) };
 }
 
 /** Reads storage afresh for every operation; failed writes are reported to callers. */
@@ -50,7 +57,8 @@ export function createEventStore(storage: () => Pick<Storage, "getItem" | "setIt
         if (ids.has(event.id)) return false;
         ids.add(event.id);
         return true;
-      }).map(({ id, title, date, time }) => ({ id, title, date, ...(time === undefined ? {} : { time }) }))
+      }).map(({ id, title, date, time, notes, labelId }) => ({ id, title, date, ...(time === undefined ? {} : { time }),
+        ...(notes === undefined ? {} : { notes }), ...(labelId === undefined ? {} : { labelId }) }))
         .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title));
     } catch {
       return [];
