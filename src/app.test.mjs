@@ -52,6 +52,32 @@ const field = (tree, label) => nodes(nodes(tree, node => node.type === "label" &
 const change = (control, value) => control.props.onChange({ target: { value } });
 const submit = tree => nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
 
+test("monthly dates cover aligned Monday-first weeks, leap years, and year boundaries", () => {
+  for (const [year, month, first, last, count] of [
+    [2024, 1, "2024-01-29", "2024-03-03", 35],
+    [2025, 1, "2025-01-27", "2025-03-02", 35],
+    [2021, 1, "2021-02-01", "2021-02-28", 28],
+    [2026, 2, "2026-02-23", "2026-04-05", 42],
+    [2026, 11, "2026-11-30", "2027-01-03", 35],
+  ]) {
+    const grid = calendar.monthDays(new Date(year, month, 1));
+    assert.equal(events.dateKey(grid[0]), first);
+    assert.equal(events.dateKey(grid.at(-1)), last);
+    assert.equal(grid.length, count);
+    assert.equal(grid[0].getDay(), 1);
+    assert.equal(grid.at(-1).getDay(), 0);
+    for (let i = 1; i < grid.length; i++) {
+      const next = new Date(grid[i - 1]);
+      next.setDate(next.getDate() + 1);
+      assert.equal(events.dateKey(grid[i]), events.dateKey(next));
+    }
+  }
+  assert.ok(calendar.monthDays(new Date(2024, 1, 15)).some(date => events.dateKey(date) === "2024-02-29"));
+  assert.ok(!calendar.monthDays(new Date(2025, 1, 15)).some(date => events.dateKey(date) === "2025-02-29"));
+  assert.equal(events.dateKey(calendar.monthDays(new Date(2026, 0, 31), -1)[0]), "2025-12-01");
+  assert.equal(events.dateKey(calendar.monthDays(new Date(2026, 11, 31), 1)[0]), "2026-12-28");
+});
+
 function fixture(initial = []) {
   const values = new Map([[events.EVENTS_STORAGE_KEY, JSON.stringify(initial)]]);
   let failWrites = false;
@@ -69,6 +95,136 @@ function fixture(initial = []) {
   return { storage, eventStore, labelStore, prompts, app, dependencies,
     confirm: value => { confirm = value; }, fail: () => { failWrites = true; }, writes: () => writes };
 }
+
+test("month switching, navigation, event placement, editing and deletion share stored data", () => {
+  const today = new Date();
+  const date = events.dateKey(today);
+  const adjacent = events.dateKey(calendar.monthDays(today)[0]);
+  const f = fixture([
+    { id: "plan", title: "Family plan", date, time: "14:30", notes: "Bring lunch\nAnd drinks", labelId: "person" },
+    ...Array.from({ length: 12 }, (_, index) => ({ id: `other-${index}`, title: `Other ${index}`, date })),
+    { id: "adjacent", title: "Boundary plan", date: adjacent },
+  ]);
+  f.storage.setItem(labels.LABELS_STORAGE_KEY, JSON.stringify([{ id: "person", name: "Alex", kind: "Person", color: "#123456" }]));
+  const app = f.app();
+  button(app.render(), "Previous week").props.onClick();
+  const weekText = text(section(app.render(), "weekly-calendar-heading"));
+  button(app.render(), "Month").props.onClick();
+  const monthly = () => section(app.render(), "monthly-calendar-heading");
+  assert.equal(section(app.render(), "weekly-calendar-heading"), undefined);
+  assert.equal(button(app.render(), "Month").props["aria-pressed"], true);
+  const cells = nodes(monthly(), node => node.type === "li" && node.props.className?.startsWith("month-day"));
+  assert.equal(cells.length % 7, 0);
+  const todayCell = cells.find(cell => nodes(cell, node => node.type === "time" && node.props.dateTime === date).length);
+  assert.equal(nodes(todayCell, node => node.props.className === "month-event").length, 13 + (adjacent === date ? 1 : 0));
+  assert.match(text(todayCell), /14:30Family planPerson: Alex/);
+  const badge = nodes(todayCell, node => node.props.className === "label-badge")[0];
+  assert.equal(badge.props.style.backgroundColor, "#123456");
+  assert.ok(button(monthly(), "Edit Boundary plan"));
+  const heading = () => text(nodes(monthly(), node => node.type === "h2")[0]);
+  const initialHeading = heading();
+  for (let i = 0; i < 14; i++) button(monthly(), "Next month").props.onClick();
+  const expected = new Date(today.getFullYear(), today.getMonth() + 14, 1);
+  assert.equal(heading(), expected.toLocaleDateString("en-US", { month: "long", year: "numeric" }));
+  button(monthly(), "Previous month").props.onClick();
+  assert.notEqual(heading(), initialHeading);
+  button(monthly(), "Today").props.onClick();
+  assert.equal(heading(), initialHeading);
+  button(monthly(), "Edit Family plan").props.onClick();
+  assert.equal(field(app.render(), "Notes").props.value, "Bring lunch\nAnd drinks");
+  assert.equal(field(app.render(), "Person or category").props.value, "person");
+  assert.equal(field(app.render(), "Time").props.value, "14:30");
+  change(field(app.render(), "Title"), "Updated plan");
+  submit(section(app.render(), "manage-events-heading"));
+  assert.ok(button(monthly(), "Edit Updated plan"));
+  const saved = f.eventStore.list().find(event => event.id === "plan");
+  assert.equal(saved.notes, "Bring lunch\nAnd drinks");
+  assert.equal(saved.labelId, "person");
+  button(app.render(), "Week").props.onClick();
+  assert.equal(text(section(app.render(), "weekly-calendar-heading")), weekText);
+  button(app.render(), "Month").props.onClick();
+  f.confirm(true);
+  button(monthly(), "Delete Updated plan").props.onClick();
+  assert.equal(button(monthly(), "Edit Updated plan"), undefined);
+  assert.equal(f.eventStore.list().some(event => event.id === "plan"), false);
+  assert.equal(f.eventStore.list().length, 13);
+});
+
+test("three-month view shares the chosen month and navigates by three across years", () => {
+  const app = fixture().app();
+  button(app.render(), "Month").props.onClick();
+  const today = new Date();
+  // Start in December to exercise a range that crosses the year boundary.
+  for (let i = today.getMonth(); i < 11; i++) button(app.render(), "Next month").props.onClick();
+  button(app.render(), "3 Months").props.onClick();
+  const three = () => section(app.render(), "three-month-calendar-heading");
+  const monthHeadings = () => nodes(three(), node => node.type === "section" && node.props.className === "compact-month")
+    .map(panel => text(nodes(panel, node => node.type === "h3")[0]));
+  const title = (year, month) => new Date(year, month, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  assert.equal(button(app.render(), "3 Months").props["aria-pressed"], true);
+  assert.deepEqual(monthHeadings(), [title(today.getFullYear(), 11), title(today.getFullYear(), 12), title(today.getFullYear(), 13)]);
+  button(three(), "Next 3 months").props.onClick();
+  assert.deepEqual(monthHeadings(), [14, 15, 16].map(month => title(today.getFullYear(), month)));
+  button(three(), "Previous 3 months").props.onClick();
+  button(three(), "Previous 3 months").props.onClick();
+  assert.deepEqual(monthHeadings(), [8, 9, 10].map(month => title(today.getFullYear(), month)));
+  button(app.render(), "Month").props.onClick();
+  assert.equal(text(nodes(section(app.render(), "monthly-calendar-heading"), node => node.type === "h2")[0]), title(today.getFullYear(), 8));
+  button(app.render(), "3 Months").props.onClick();
+  button(three(), "Today").props.onClick();
+  assert.deepEqual(monthHeadings(), [0, 1, 2].map(offset => title(today.getFullYear(), today.getMonth() + offset)));
+  assert.match(text(section(three(), "selected-day-heading")), new RegExp(events.dateKey(today)));
+  button(app.render(), "Week").props.onClick();
+  assert.ok(section(app.render(), "weekly-calendar-heading"));
+});
+
+test("compact dates keep overlapping events discoverable with colors, notes and shared CRUD", () => {
+  const today = new Date();
+  const dates = [0, 1, 2].map(offset => events.dateKey(new Date(today.getFullYear(), today.getMonth() + offset, 15)));
+  const f = fixture([
+    ...Array.from({ length: 15 }, (_, index) => ({ id: `overlap-${index}`, title: `Plan ${index}`, date: dates[0], time: "09:30", notes: "Keep\nthese notes", labelId: "person" })),
+    { id: "next", title: "Next month plan", date: dates[1] },
+    { id: "last", title: "Third month plan", date: dates[2] },
+  ]);
+  f.storage.setItem(labels.LABELS_STORAGE_KEY, JSON.stringify([{ id: "person", name: "Alex", kind: "Person", color: "#123456" }]));
+  const app = f.app();
+  button(app.render(), "3 Months").props.onClick();
+  const three = () => section(app.render(), "three-month-calendar-heading");
+  const dateButton = date => nodes(three(), node => node.type === "button" && node.props.className === "compact-date" && nodes(node, child => child.type === "time" && child.props.dateTime === date).length)[0];
+  const detail = () => section(three(), "selected-day-heading");
+  for (const [index, date] of dates.entries()) {
+    const control = dateButton(date);
+    assert.match(control.props["aria-label"], new RegExp(`${index === 0 ? 15 : 1} events?`));
+    control.props.onClick();
+    assert.equal(dateButton(date).props["aria-pressed"], true);
+    assert.equal(nodes(detail(), node => node.type === "li").length, index === 0 ? 15 : 1);
+    if (index === 0) {
+      const dots = nodes(control, node => node.props.className === "event-dot");
+      assert.equal(dots.length, 3);
+      assert.ok(dots.every(dot => dot.props.style.backgroundColor === "#123456"));
+      for (let i = 0; i < 15; i++) assert.ok(button(detail(), `Edit Plan ${i}`));
+    }
+  }
+  dateButton(dates[0]).props.onClick();
+  button(detail(), "Edit Plan 14").props.onClick();
+  assert.equal(field(app.render(), "Notes").props.value, "Keep\nthese notes");
+  assert.equal(field(app.render(), "Person or category").props.value, "person");
+  assert.equal(field(app.render(), "Time").props.value, "09:30");
+  change(field(app.render(), "Title"), "Revised plan");
+  submit(section(app.render(), "manage-events-heading"));
+  assert.ok(button(detail(), "Edit Revised plan"));
+  const saved = events.createEventStore(() => f.storage).list().find(event => event.id === "overlap-14");
+  assert.equal(saved.notes, "Keep\nthese notes");
+  assert.equal(saved.labelId, "person");
+  assert.equal(saved.time, "09:30");
+  button(detail(), "Delete Revised plan").props.onClick();
+  assert.ok(button(detail(), "Edit Revised plan"));
+  f.confirm(true);
+  button(detail(), "Delete Revised plan").props.onClick();
+  assert.equal(button(detail(), "Edit Revised plan"), undefined);
+  assert.match(dateButton(dates[0]).props["aria-label"], /14 events/);
+  assert.equal(f.eventStore.list().length, 16);
+});
 
 for (const view of ["weekly-calendar-heading", "upcoming-events-heading", "manage-events-heading"]) {
   test(`event deletion in ${view} requires confirmation and persists only on acceptance`, () => {
