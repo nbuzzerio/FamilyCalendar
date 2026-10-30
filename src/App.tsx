@@ -99,7 +99,11 @@ export function App() {
         <button type="button" aria-pressed={view === "month"} onClick={() => setView("month")}>Month</button>
         <button type="button" aria-pressed={view === "three-months"} onClick={() => {
           setView("three-months");
-          setSelectedDate(dateKey(month));
+          // Keep a chosen date when returning to the same visible range.
+          const rangeEnd = new Date(month.getFullYear(), month.getMonth() + 3, 1, 12);
+          if (selectedDate < dateKey(month) || selectedDate >= dateKey(rangeEnd)) {
+            setSelectedDate(dateKey(month));
+          }
         }}>3 Months</button>
       </nav>
       {view === "week" ?

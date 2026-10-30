@@ -178,6 +178,58 @@ test("three-month view shares the chosen month and navigates by three across yea
   assert.ok(section(app.render(), "weekly-calendar-heading"));
 });
 
+test("three-month leap-day boundaries place each event once and retain only visible selections", () => {
+  const f = fixture([
+    { id: "before", title: "Outside range", date: "2024-01-31" },
+    { id: "leap", title: "Leap day", date: "2024-02-29" },
+    { id: "march", title: "March starts", date: "2024-03-01", time: "08:00" },
+    { id: "last", title: "Last day", date: "2024-04-30" },
+    { id: "after", title: "After range", date: "2024-05-01" },
+  ]);
+  const app = f.app();
+  button(app.render(), "Month").props.onClick();
+  const today = new Date();
+  const offset = (2024 - today.getFullYear()) * 12 + 1 - today.getMonth();
+  for (let i = 0; i < Math.abs(offset); i++) {
+    button(app.render(), offset < 0 ? "Previous month" : "Next month").props.onClick();
+  }
+  button(app.render(), "3 Months").props.onClick();
+  const three = () => section(app.render(), "three-month-calendar-heading");
+  const controls = () => nodes(three(), node => node.props.className === "compact-date");
+  const control = date => controls().find(node => nodes(node, child => child.type === "time" && child.props.dateTime === date).length);
+  const detail = () => section(three(), "selected-day-heading");
+  assert.equal(controls().length, 29 + 31 + 30);
+  const dates = controls().map(node => nodes(node, child => child.type === "time")[0].props.dateTime);
+  assert.equal(new Set(dates).size, dates.length);
+  assert.equal(control("2024-01-31"), undefined);
+  assert.equal(control("2024-05-01"), undefined);
+  for (const [date, title] of [["2024-02-29", "Leap day"], ["2024-03-01", "March starts"], ["2024-04-30", "Last day"]]) {
+    assert.match(control(date).props["aria-label"], /: 1 event$/);
+    control(date).props.onClick();
+    assert.ok(button(detail(), `Edit ${title}`));
+    assert.equal(nodes(detail(), node => node.type === "li").length, 1);
+  }
+  button(app.render(), "3 Months").props.onClick();
+  assert.equal(control("2024-04-30").props["aria-pressed"], true);
+  button(app.render(), "Week").props.onClick();
+  button(app.render(), "3 Months").props.onClick();
+  assert.equal(control("2024-04-30").props["aria-pressed"], true);
+  button(three(), "Next 3 months").props.onClick();
+  assert.match(text(detail()), /2024-05-01/);
+  assert.ok(button(detail(), "Edit After range"));
+  button(three(), "Previous 3 months").props.onClick();
+  assert.match(text(detail()), /2024-02-01No events scheduled/);
+  button(app.render(), "Month").props.onClick();
+  button(app.render(), "Previous month").props.onClick();
+  button(app.render(), "3 Months").props.onClick();
+  // February 1 is still visible in January–March.
+  assert.equal(control("2024-02-01").props["aria-pressed"], true);
+  button(app.render(), "Month").props.onClick();
+  for (let i = 0; i < 3; i++) button(app.render(), "Next month").props.onClick();
+  button(app.render(), "3 Months").props.onClick();
+  assert.equal(control("2024-04-01").props["aria-pressed"], true);
+});
+
 test("compact dates keep overlapping events discoverable with colors, notes and shared CRUD", () => {
   const today = new Date();
   const dates = [0, 1, 2].map(offset => events.dateKey(new Date(today.getFullYear(), today.getMonth() + offset, 15)));
