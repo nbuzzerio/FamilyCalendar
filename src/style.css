@@ -19,7 +19,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { max-width: 80rem; margin: 4rem auto; padding: 0 1.5rem; }
+main { max-width: 80rem; margin: 4rem auto; padding: 0 1.5rem; overflow-wrap: anywhere; }
 
 .weekly-calendar { margin: 2.5rem 0; }
 .week-header { margin-bottom: 1rem; }
@@ -87,7 +87,7 @@ main { max-width: 80rem; margin: 4rem auto; padding: 0 1.5rem; }
 .event-form label { display: grid; gap: 0.5rem; flex: 1 1 12rem; min-width: 0; }
 .event-form input { width: 100%; min-width: 0; }
 input, button, textarea { font: inherit; padding: 0.6rem 0.75rem; border: 1px solid var(--control-border); border-radius: 0.35rem; }
-button { cursor: pointer; background: var(--accent-soft); color: var(--text); }
+button { cursor: pointer; background: var(--accent-soft); color: var(--text); max-width: 100%; overflow-wrap: anywhere; }
 button:hover { background: var(--hover); }
 input:focus-visible, button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .event-form .notes-field { flex-basis: 100%; }
@@ -139,6 +139,7 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .compact-adjacent { color: var(--muted); background: var(--page); }
 .compact-date [aria-current="date"] { font-weight: 800; text-decoration: underline; }
 .compact-date[aria-pressed="true"] { border: 2px solid var(--accent); background: var(--hover); }
+.compact-date:focus-visible { position: relative; z-index: 1; outline: 3px solid var(--accent); outline-offset: 1px; }
 .event-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.15rem; margin-top: 0.25rem; }
 .event-dot { width: 0.4rem; height: 0.4rem; border: 1px solid var(--muted); border-radius: 50%; }
 .compact-count { font-size: 0.7rem; overflow-wrap: anywhere; }
@@ -154,6 +155,9 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 }
 
 @media (max-width: 60rem) {
+  .month-weekdays { display: none; }
+  .month-days { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .month-day { min-height: auto; }
   .week-days { grid-template-columns: 1fr; }
   .day { min-height: auto; padding: 1rem; }
   .day h3 time { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }

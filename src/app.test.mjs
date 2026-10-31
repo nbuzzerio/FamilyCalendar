@@ -423,6 +423,28 @@ test("appearance selector applies and persists all choices and restores them on 
   }
 });
 
+test("compact dates support bounded keyboard movement without changing selection", () => {
+  const app = fixture().app();
+  button(app.render(), "3 Months").props.onClick();
+  const panel = nodes(app.render(), node => node.props.className === "compact-month")[0];
+  const list = nodes(panel, node => node.props.className === "compact-days")[0];
+  assert.ok(list.props["aria-label"]);
+  assert.equal(list.props["aria-describedby"], "compact-help");
+  const dates = nodes(panel, node => node.props.className === "compact-date");
+  let focused;
+  const controls = dates.map((_, index) => ({ focus() { focused = index; }, closest() { return { querySelectorAll: () => controls }; } }));
+  const selected = dates.map(date => date.props["aria-pressed"]);
+  for (const [index, key, expected] of [[10, "ArrowLeft", 9], [10, "ArrowRight", 11], [10, "ArrowUp", 3], [10, "ArrowDown", 17], [10, "Home", 0], [10, "End", dates.length - 1], [0, "ArrowUp", 0], [dates.length - 1, "ArrowRight", dates.length - 1]]) {
+    let prevented = false;
+    dates[index].props.onKeyDown({ key, currentTarget: controls[index], preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(focused, expected);
+  }
+  dates[0].props.onKeyDown({ key: "Tab", preventDefault() { assert.fail("Tab must keep native behavior"); } });
+  const after = nodes(app.render(), node => node.props.className === "compact-month")[0];
+  assert.deepEqual(nodes(after, node => node.props.className === "compact-date").map(date => date.props["aria-pressed"]), selected);
+});
+
 test("theme palettes provide readable text, controls and selected navigation", () => {
   const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
   const palettes = [...css.matchAll(/(?:^:root(?:\[data-theme="dark"\])?) \{([^}]+)\}/gm)]
