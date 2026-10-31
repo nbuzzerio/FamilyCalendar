@@ -3,6 +3,7 @@ import { dateKey, eventStore, type CalendarEvent } from "./events";
 import { monthDays, upcomingEvents, weekDays } from "./calendar";
 import { labelStore, labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
+import { AppearanceSelector } from "./AppearanceSelector";
 
 export function App() {
   const [events, setEvents] = useState(() => eventStore.list());
@@ -93,6 +94,7 @@ export function App() {
   return (
     <main>
       <h1>Family Calendar</h1>
+      <AppearanceSelector />
       <p>A private calendar for our family.</p>
       <nav className="view-selector" aria-label="Calendar view">
         <button type="button" aria-pressed={view === "week"} onClick={() => setView("week")}>Week</button>

@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as events from "./events.ts";
 import * as labels from "./labels.ts";
 import * as calendar from "./calendar.ts";
+import * as theme from "./theme.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -90,7 +91,7 @@ function fixture(initial = []) {
   const labelStore = labels.createLabelStore(() => storage);
   const prompts = [];
   let confirm = false;
-  const dependencies = { "./events": { ...events, eventStore }, "./labels": { ...labels, labelStore }, "./calendar": calendar, "./LabelManager": { LabelManager() {} } };
+  const dependencies = { "./events": { ...events, eventStore }, "./labels": { ...labels, labelStore }, "./calendar": calendar, "./LabelManager": { LabelManager() {} }, "./AppearanceSelector": { AppearanceSelector() {} } };
   const app = () => harness("./App.tsx", dependencies, { confirm(message) { prompts.push(message); return confirm; } });
   return { storage, eventStore, labelStore, prompts, app, dependencies,
     confirm: value => { confirm = value; }, fail: () => { failWrites = true; }, writes: () => writes };
@@ -378,4 +379,72 @@ test("label and event forms integrate notes, dropdown selection, color edits, re
   const reloaded = events.createEventStore(() => f.storage).list();
   assert.equal(reloaded.find(item => item.id === event.id).labelId, undefined);
   assert.deepEqual(reloaded.find(item => item.id === legacy.id), legacy);
+});
+
+test("appearance selector applies and persists all choices and restores them on reload", () => {
+  const values = new Map();
+  const root = { dataset: {} };
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  globalThis.window = { localStorage: {
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  } };
+  globalThis.document = { documentElement: root };
+  try {
+    const create = () => harness("./AppearanceSelector.tsx", { "./theme": theme });
+    let app = create();
+    assert.equal(field(app.render(), "Appearance").props.value, "system");
+    assert.deepEqual(nodes(app.render(), node => node.type === "option").map(text), ["Light", "Dark", "System"]);
+    for (const choice of ["dark", "light", "system"]) {
+      change(field(app.render(), "Appearance"), choice);
+      assert.equal(root.dataset.theme, choice);
+      assert.equal(values.get(theme.THEME_STORAGE_KEY), choice);
+      app = create();
+      assert.equal(field(app.render(), "Appearance").props.value, choice);
+      theme.applyTheme(theme.readTheme());
+      assert.equal(root.dataset.theme, choice);
+    }
+    values.set(theme.THEME_STORAGE_KEY, "invalid");
+    assert.equal(theme.readTheme(), "system");
+    globalThis.window.localStorage.getItem = () => { throw new Error("blocked"); };
+    assert.equal(theme.readTheme(), "system");
+    globalThis.window.localStorage.setItem = () => { throw new Error("quota"); };
+    change(field(app.render(), "Appearance"), "dark");
+    assert.equal(root.dataset.theme, "dark");
+    assert.equal(field(app.render(), "Appearance").props.value, "dark");
+    assert.match(text(nodes(app.render(), node => node.props.role === "alert")[0]), /could not be saved/);
+    globalThis.window.localStorage.setItem = () => {};
+    change(field(app.render(), "Appearance"), "light");
+    assert.equal(nodes(app.render(), node => node.props.role === "alert").length, 0);
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.document = previousDocument;
+  }
+});
+
+test("theme palettes provide readable text, controls and selected navigation", () => {
+  const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
+  const palettes = [...css.matchAll(/(?:^:root(?:\[data-theme="dark"\])?) \{([^}]+)\}/gm)]
+    .map(match => Object.fromEntries([...match[1].matchAll(/--([\w-]+): (#[\da-f]+);/g)].map(value => [value[1], value[2]])));
+  assert.equal(palettes.length, 2);
+  const luminance = hex => {
+    if (hex.length === 4) hex = "#" + [...hex.slice(1)].map(c => c + c).join("");
+    return [0.2126, 0.7152, 0.0722].reduce((sum, weight, i) => {
+      const value = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+      return sum + weight * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    }, 0);
+  };
+  for (const palette of palettes) {
+    for (const background of ["page", "surface", "accent-soft", "hover", "outside"]) {
+      for (const foreground of ["text", "muted"]) {
+        const values = [luminance(palette[background]), luminance(palette[foreground])].sort((a, b) => a - b);
+        assert.ok((values[1] + 0.05) / (values[0] + 0.05) >= 4.5, `${foreground} on ${background}`);
+      }
+    }
+    const values = [luminance(palette.accent), luminance(palette["on-accent"])].sort((a, b) => a - b);
+    assert.ok((values[1] + 0.05) / (values[0] + 0.05) >= 4.5);
+  }
+  // System uses the live browser media query; explicit choices are excluded.
+  assert.match(css, /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\):not\(\[data-theme="dark"\]\)/);
 });
