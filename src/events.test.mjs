@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createEventStore, dateKey, isLocalDate, isLocalTime, EVENTS_STORAGE_KEY } from "./events.ts";
+import { createEventStore, expandEvents, localDate, dateKey, isLocalDate, isLocalTime, EVENTS_STORAGE_KEY } from "./events.ts";
 import { upcomingEvents, weekDays } from "./calendar.ts";
 import { createLabelStore, LABELS_STORAGE_KEY, labelTextColor } from "./labels.ts";
 
@@ -225,4 +225,75 @@ test("editing across weeks and deletion persist in calendar and upcoming data", 
   assert.deepEqual(upcomingEvents(afterReload, today), [morning]);
   refreshed.delete(morning.id);
   assert.deepEqual(upcomingEvents(store.list(), today), []);
+});
+
+
+const series = (date, frequency, endDate) => ({ id: "series", title: "Plan", date, time: "02:30", notes: "Keep\nnotes", labelId: "person", recurrence: { frequency, ...(endDate ? { endDate } : {}) } });
+const occurrenceDates = (event, start, end) => expandEvents([event], start, end).map(item => item.date);
+
+test("daily and weekly recurrence crosses month/year boundaries and includes its end date", () => {
+  assert.deepEqual(occurrenceDates(series("2026-12-30", "Daily", "2027-01-02"), "2026-12-29", "2027-01-04"), ["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"]);
+  assert.deepEqual(occurrenceDates(series("2026-12-25", "Weekly", "2027-01-08"), "2026-12-01", "2027-02-01"), ["2026-12-25", "2027-01-01", "2027-01-08"]);
+  for (const frequency of ["Never", "Daily", "Weekly", "Monthly", "Yearly"]) {
+    assert.deepEqual(occurrenceDates(series("2024-02-29", frequency, frequency === "Never" ? undefined : "2024-02-29"), "2024-02-28", "2024-03-01"), ["2024-02-29"]);
+  }
+});
+
+test("monthly and yearly recurrence remains anchored through 28/29/30/31-day months", () => {
+  for (const [year, feb] of [[2023, 28], [2024, 29]]) {
+    assert.deepEqual(occurrenceDates(series(`${year}-01-31`, "Monthly"), `${year}-01-01`, `${year}-05-31`), [`${year}-01-31`, `${year}-02-${feb}`, `${year}-03-31`, `${year}-04-30`, `${year}-05-31`]);
+  }
+  assert.deepEqual(occurrenceDates(series("2024-02-29", "Yearly"), "2025-01-01", "2028-12-31"), ["2025-02-28", "2026-02-28", "2027-02-28", "2028-02-29"]);
+  assert.deepEqual(occurrenceDates(series("2024-01-30", "Monthly"), "2024-02-01", "2024-04-30"), ["2024-02-29", "2024-03-30", "2024-04-30"]);
+});
+
+test("recurrence storage round trips preserve legacy fields and reject invalid edits without writes", () => {
+  const legacy = { id: "old", title: "Old", date: "2020-01-01", time: "09:45", notes: "Original\nnotes", labelId: "color-label" };
+  const { store, storage } = fixture(JSON.stringify([legacy]));
+  for (const frequency of ["Never", "Daily", "Weekly", "Monthly", "Yearly"]) {
+    const input = series("2024-02-29", frequency);
+    const saved = store.create(input);
+    assert.deepEqual(createEventStore(() => storage).list().find(event => event.id === saved.id), saved);
+  }
+  assert.deepEqual(store.list().find(event => event.id === legacy.id), legacy);
+  const before = storage.getItem(EVENTS_STORAGE_KEY);
+  for (const recurrence of [null, [], {}, { frequency: "Hourly" }, { frequency: "Daily", endDate: "2024-02-30" }, { frequency: "Daily", endDate: "2020-01-01" }, { frequency: "Never", endDate: "2025-01-01" }, { frequency: "Weekly", interval: 2 }]) {
+    assert.throws(() => store.create({ title: "Invalid", date: "2024-02-29", recurrence }));
+    assert.throws(() => store.update(legacy.id, { ...legacy, date: "2024-02-29", recurrence }));
+    assert.equal(storage.getItem(EVENTS_STORAGE_KEY), before);
+  }
+  assert.equal(JSON.parse(before).length, 6); // Series records, never materialized occurrences.
+  const saved = store.list().find(event => event.recurrence?.frequency === "Monthly");
+  store.update(saved.id, { ...saved, recurrence: { frequency: "Weekly", endDate: "2024-03-07" } });
+  assert.deepEqual(store.list().find(event => event.id === saved.id).recurrence, { frequency: "Weekly", endDate: "2024-03-07" });
+});
+
+test("open series expansion is bounded, deterministic and can seek far beyond its origin", () => {
+  const event = series("0001-01-01", "Daily");
+  const result = expandEvents([event], "2099-12-30", "2100-01-02");
+  assert.deepEqual(result.map(item => item.date), ["2099-12-30", "2099-12-31", "2100-01-01", "2100-01-02"]);
+  assert.deepEqual(expandEvents([event], "2099-12-30", "2100-01-02"), result);
+  assert.throws(() => expandEvents([event], "2000-01-01", "2020-01-01"), /3660/);
+  assert.throws(() => expandEvents([event], "2026-02-30", "2026-03-01"));
+  assert.throws(() => expandEvents([event], "2026-03-02", "2026-03-01"));
+  assert.equal(event.date, "0001-01-01");
+});
+
+test("local recurrence dates and wall times survive DST in multiple time zones", () => {
+  const previous = process.env.TZ;
+  try {
+    for (const zone of ["America/New_York", "Europe/Berlin", "Pacific/Auckland"]) {
+      process.env.TZ = zone;
+      for (const [start, end] of [["2026-03-06", "2026-03-10"], ["2026-10-30", "2026-11-03"], ["2026-03-27", "2026-03-31"], ["2026-04-03", "2026-04-07"]]) {
+        const event = series(start, "Daily");
+        const occurrences = expandEvents([event], start, end);
+        assert.equal(occurrences.length, 5, zone);
+        assert.equal(occurrences.at(-1).date, end);
+        assert.ok(occurrences.every(item => item.time === "02:30" && item.notes === event.notes && item.labelId === event.labelId && dateKey(localDate(item.date)) === item.date));
+        const weekly = expandEvents([series(start, "Weekly")], start, dateKey(new Date(localDate(start).setDate(localDate(start).getDate() + 14))));
+        assert.equal(weekly.length, 3);
+        assert.ok(weekly.every(item => localDate(item.date).getDay() === localDate(start).getDay() && item.time === "02:30"));
+      }
+    }
+  } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
 });

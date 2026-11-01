@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "./events";
+import { dateKey, expandEvents, localDate, type CalendarEvent } from "./events";
 
 /** Complete Monday-first weeks covering the requested month, including adjacent dates. */
 export function monthDays(anchor: Date, offset = 0): Date[] {
@@ -26,6 +26,10 @@ export function weekDays(anchor: Date, offset = 0): Date[] {
 
 /** Includes today's events; independent of the week currently being viewed. */
 export function upcomingEvents(events: CalendarEvent[], today: string): CalendarEvent[] {
-  return events.filter(event => event.date >= today).sort((a, b) =>
+  const end = localDate(today);
+  end.setFullYear(end.getFullYear() + 1);
+  const recurring = events.filter(event => event.recurrence && event.recurrence.frequency !== "Never");
+  const single = events.filter(event => !event.recurrence || event.recurrence.frequency === "Never");
+  return [...single.filter(event => event.date >= today), ...expandEvents(recurring, today, dateKey(end))].sort((a, b) =>
     a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title));
 }

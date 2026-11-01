@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { dateKey, eventStore, type CalendarEvent } from "./events";
+import { dateKey, expandEvents, eventStore, type CalendarEvent, type RecurrenceFrequency } from "./events";
 import { monthDays, upcomingEvents, weekDays } from "./calendar";
 import { labelStore, labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
@@ -13,6 +13,8 @@ export function App() {
   const [title, setTitle] = useState("");
   const [eventDate, setEventDate] = useState(() => dateKey(new Date()));
   const [eventTime, setEventTime] = useState("");
+  const [frequency, setFrequency] = useState<RecurrenceFrequency>("Never");
+  const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -38,7 +40,9 @@ export function App() {
       return false;
     }
   }
-  function editEvent(event: CalendarEvent) {
+  function editEvent(occurrence: CalendarEvent) {
+    const event = events.find(item => item.id === occurrence.id) ?? occurrence;
+    setFrequency(event.recurrence?.frequency ?? "Never"); setEndDate(event.recurrence?.endDate ?? "");
     setEditing(event.id); setTitle(event.title); setEventDate(event.date); setEventTime(event.time ?? "");
     setNotes(event.notes ?? "");
     setLabelId(labels.some(label => label.id === event.labelId) ? event.labelId! : "");
@@ -49,9 +53,9 @@ export function App() {
     return <div className="event-actions">
       <button type="button" onClick={() => editEvent(event)} aria-label={`Edit ${event.title}`}>Edit</button>
       <button type="button" onClick={() => {
-        if (!window.confirm(`Delete "${event.title}"? This cannot be undone.`)) return;
+        if (!window.confirm(`Delete "${event.title}"${event.recurrence && event.recurrence.frequency !== "Never" ? " and all occurrences" : ""}? This cannot be undone.`)) return;
         if (mutate(() => eventStore.delete(event.id))) {
-          if (editing === event.id) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); }
+          if (editing === event.id) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); }
           setNotice("Event deleted.");
         }
       }} aria-label={`Delete ${event.title}`}>Delete</button>
@@ -70,7 +74,7 @@ export function App() {
     </span> : null;
   }
   function renderEvent(event: CalendarEvent) {
-    return <li key={event.id}>
+    return <li key={`${event.id}:${event.date}`}>
       <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.date} · {event.time ?? "All day"}</time> {event.title}{" "}
       {eventActions(event)}
       {eventLabel(event)}
@@ -84,7 +88,9 @@ export function App() {
   const upcoming = upcomingEvents(events, dateKey(today));
   const monthTitle = (date: Date) => date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const threeMonths = Array.from({ length: 3 }, (_, index) => new Date(month.getFullYear(), month.getMonth() + index, 1, 12));
-  const selectedEvents = events.filter(event => event.date === selectedDate);
+  const visibleDays = view === "week" ? days : view === "month" ? monthDays(month) : threeMonths.flatMap(date => monthDays(date));
+  const visibleEvents = expandEvents(events, dateKey(visibleDays[0]), dateKey(visibleDays[visibleDays.length - 1]));
+  const selectedEvents = expandEvents(events, selectedDate, selectedDate);
   function moveThreeMonths(offset: number) {
     const next = new Date(month.getFullYear(), month.getMonth() + offset, 1, 12);
     setMonth(next);
@@ -132,9 +138,9 @@ export function App() {
                   </time>
                   {isToday && <span className="today-label">Today</span>}
                 </h3>
-                {events.some(event => event.date === dateKey(date)) ?
-                  <ul className="day-events">{events.filter(event => event.date === dateKey(date)).map(event =>
-                    <li key={event.id}>
+                {visibleEvents.some(event => event.date === dateKey(date)) ?
+                  <ul className="day-events">{visibleEvents.filter(event => event.date === dateKey(date)).map(event =>
+                    <li key={`${event.id}:${event.date}`}>
                       <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.time ?? "All day"}</time>
                       <span>{event.title}</span>
                       {eventLabel(event)}
@@ -163,12 +169,12 @@ export function App() {
             {monthDays(month).map(date => {
               const key = dateKey(date);
               const isToday = key === dateKey(today);
-              const dayEvents = events.filter(event => event.date === key);
+              const dayEvents = visibleEvents.filter(event => event.date === key);
               return <li key={key} className={`month-day${date.getMonth() !== month.getMonth() ? " outside-month" : ""}${isToday ? " day-today" : ""}`}>
                 <h3><time dateTime={key} aria-current={isToday ? "date" : undefined} aria-label={date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}>
                   {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                 </time>{isToday && <span className="today-label">Today</span>}</h3>
-                <ul className="day-events">{dayEvents.map(event => <li key={event.id}>
+                <ul className="day-events">{dayEvents.map(event => <li key={`${event.id}:${event.date}`}>
                   <button type="button" className="month-event" onClick={() => editEvent(event)} aria-label={`Edit ${event.title}`}>
                     <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.time ?? "All day"}</time>
                     <span>{event.title}</span>
@@ -203,7 +209,7 @@ export function App() {
               {monthDays(calendarMonth).map(date => {
                 const key = dateKey(date);
                 const inMonth = date.getMonth() === calendarMonth.getMonth();
-                const dayEvents = inMonth ? events.filter(event => event.date === key) : [];
+                const dayEvents = inMonth ? visibleEvents.filter(event => event.date === key) : [];
                 const fullDate = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
                 return <li key={key} className={inMonth ? "compact-day" : "compact-day outside-month"}>
                   {inMonth ? <button type="button" className="compact-date" aria-label={`${fullDate}: ${dayEvents.length} ${dayEvents.length === 1 ? "event" : "events"}`} aria-pressed={selectedDate === key} aria-controls="selected-day-events" onClick={() => setSelectedDate(key)} onKeyDown={event => {
@@ -234,22 +240,31 @@ export function App() {
       <section aria-labelledby="upcoming-events-heading">
         <h2 id="upcoming-events-heading">Upcoming events</h2>
         {upcoming.length ? <ul>{upcoming.map(renderEvent)}</ul> : <p>No events scheduled</p>}
-        <p>Saved events from today onward, across all weeks.</p>
+        <p>Events from today onward, across all weeks. Repeating occurrences are shown through one year from today.</p>
       </section>
       <section aria-labelledby="manage-events-heading">
         <h2 id="manage-events-heading">{editing ? "Edit event" : "Add event"}</h2>
         <form className="event-form" onSubmit={event => {
           event.preventDefault();
           if (mutate(() => {
-            const input = { title, date: eventDate, notes, ...(labels.some(label => label.id === labelId) ? { labelId } : {}), ...(eventTime ? { time: eventTime } : {}) };
+            const input = { title, date: eventDate, notes, ...(frequency === "Never" ? {} : { recurrence: { frequency, ...(endDate ? { endDate } : {}) } }), ...(labels.some(label => label.id === labelId) ? { labelId } : {}), ...(eventTime ? { time: eventTime } : {}) };
             if (editing) eventStore.update(editing, input);
             else eventStore.create(input);
-          })) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setNotice(editing ? "Event updated." : "Event added."); }
+          })) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setNotice(editing ? "Event updated." : "Event added."); }
         }}>
           <label>Title <input ref={titleInput} required value={title} onChange={event => setTitle(event.target.value)} /></label>{" "}
           <label>Date <input required type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} /></label>{" "}
           <label>Time (optional) <input type="time" value={eventTime} onChange={event => setEventTime(event.target.value)} aria-describedby="event-time-help" /></label>
           <p id="event-time-help" className="form-help">Leave time blank for an all-day event. Times use your local clock.</p>
+          <label>Repeat
+            <select value={frequency} onChange={event => { setFrequency(event.target.value as RecurrenceFrequency); if (event.target.value === "Never") setEndDate(""); }}>
+              {["Never", "Daily", "Weekly", "Monthly", "Yearly"].map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          {frequency !== "Never" && <label>Repeat until (optional, inclusive)
+            <input type="date" min={eventDate} value={endDate} onChange={event => setEndDate(event.target.value)} />
+          </label>}
+          <p className="form-help">Editing or deleting a repeating event changes the entire series.</p>
           <label>Person or category (optional)
             <select value={labels.some(label => label.id === labelId) ? labelId : ""} onChange={event => setLabelId(event.target.value)}>
               <option value="">No label</option>
@@ -260,7 +275,7 @@ export function App() {
             <textarea rows={4} value={notes} onChange={event => setNotes(event.target.value)} />
           </label>
           <button type="submit">{editing ? "Save event" : "Add event"}</button>{" "}
-          {editing && <button type="button" onClick={() => { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setError(""); }}>Cancel</button>}
+          {editing && <button type="button" onClick={() => { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setError(""); }}>Cancel</button>}
         </form>
         {error && <p role="alert">{error}</p>}
         <p role="status">{notice}</p>

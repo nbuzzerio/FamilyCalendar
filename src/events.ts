@@ -1,3 +1,6 @@
+export type RecurrenceFrequency = "Never" | "Daily" | "Weekly" | "Monthly" | "Yearly";
+export interface RecurrenceRule { frequency: RecurrenceFrequency; endDate?: string }
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -8,6 +11,7 @@ export interface CalendarEvent {
   /** Optional free-form text; line breaks are preserved. */
   notes?: string;
   labelId?: string;
+  recurrence?: RecurrenceRule;
 }
 
 export type EventInput = Omit<CalendarEvent, "id">;
@@ -29,19 +33,67 @@ export function isLocalTime(value: unknown): value is string {
   return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
+export function isRecurrenceRule(value: unknown, start: string): value is RecurrenceRule {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const rule = value as Record<string, unknown>;
+  return Object.keys(rule).every(key => key === "frequency" || key === "endDate") &&
+    ["Never", "Daily", "Weekly", "Monthly", "Yearly"].includes(rule.frequency as string) &&
+    (rule.endDate === undefined || (rule.frequency !== "Never" && isLocalDate(rule.endDate) && rule.endDate >= start));
+}
+
+/** Parse local components at noon so calendar arithmetic never depends on DST hours. */
+export function localDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(2000, month - 1, day, 12);
+  date.setFullYear(year);
+  return date;
+}
+
+/** Explicit inclusive range, at most 3660 calendar days; never expands from the series origin. */
+export function expandEvents(events: CalendarEvent[], start: string, end: string): CalendarEvent[] {
+  if (!isLocalDate(start) || !isLocalDate(end) || end < start) throw new Error("Invalid occurrence range.");
+  const dates: string[] = [];
+  const cursor = localDate(start);
+  while (dateKey(cursor) <= end) {
+    if (dates.length === 3660) throw new Error("Occurrence range exceeds 3660 days.");
+    dates.push(dateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const result: CalendarEvent[] = [];
+  for (const event of events) {
+    const rule = event.recurrence;
+    if (rule !== undefined && !isRecurrenceRule(rule, event.date)) throw new Error("Invalid recurrence rule or end date.");
+    const origin = localDate(event.date);
+    for (const date of dates) {
+      if (date < event.date || (rule?.endDate && date > rule.endDate)) continue;
+      const current = localDate(date);
+      const frequency = rule?.frequency ?? "Never";
+      const lastDay = new Date(current.getFullYear(), current.getMonth() + 1, 0, 12).getDate();
+      const matches = frequency === "Daily" ||
+        (frequency === "Never" && date === event.date) ||
+        (frequency === "Weekly" && current.getDay() === origin.getDay()) ||
+        ((frequency === "Monthly" || (frequency === "Yearly" && current.getMonth() === origin.getMonth())) &&
+          current.getDate() === Math.min(origin.getDate(), lastDay));
+      if (matches) result.push({ ...event, date });
+    }
+  }
+  return result.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+}
+
 function isEvent(value: unknown): value is CalendarEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
   return typeof event.id === "string" && event.id.trim().length > 0 &&
     typeof event.title === "string" && event.title.trim().length > 0 && isLocalDate(event.date) &&
     (event.time === undefined || isLocalTime(event.time)) &&
+    (event.recurrence === undefined || isRecurrenceRule(event.recurrence, event.date)) &&
     (event.notes === undefined || typeof event.notes === "string") &&
     (event.labelId === undefined || (typeof event.labelId === "string" && !!event.labelId.trim()));
 }
 
 function validate(input: EventInput): EventInput {
-  if (!isEvent({ ...input, id: "validation" })) throw new Error("Enter a title, a valid local date, and a valid time if provided.");
-  return { title: input.title.trim(), date: input.date, ...(input.time === undefined ? {} : { time: input.time }),
+  if (!isEvent({ ...input, id: "validation" })) throw new Error("Enter a title, valid local date/time, and a valid recurrence rule with an end date on or after the start.");
+  return { ...(input.recurrence === undefined ? {} : { recurrence: { ...input.recurrence } }), title: input.title.trim(), date: input.date, ...(input.time === undefined ? {} : { time: input.time }),
     ...(input.notes?.trim() ? { notes: input.notes } : {}),
     ...(input.labelId === undefined ? {} : { labelId: input.labelId }) };
 }
@@ -57,7 +109,7 @@ export function createEventStore(storage: () => Pick<Storage, "getItem" | "setIt
         if (ids.has(event.id)) return false;
         ids.add(event.id);
         return true;
-      }).map(({ id, title, date, time, notes, labelId }) => ({ id, title, date, ...(time === undefined ? {} : { time }),
+      }).map(({ id, title, date, time, notes, labelId, recurrence }) => ({ id, title, date, ...(recurrence === undefined ? {} : { recurrence: { ...recurrence } }), ...(time === undefined ? {} : { time }),
         ...(notes === undefined ? {} : { notes }), ...(labelId === undefined ? {} : { labelId }) }))
         .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title));
     } catch {

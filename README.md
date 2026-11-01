@@ -113,3 +113,23 @@ During that preparation, no Git repository was initialized or changed; no projec
 enrollment, coding grant, OAuth, provider call, elevation, Dellbox access or
 protected Studio change occurred.
 Review this preparation before separately authorizing any subsequent phase.
+
+## Recurrence
+
+Repeat supports Never (the default), Daily, Weekly, Monthly and Yearly. An optional
+Repeat until date includes occurrences on that local date. Editing or deleting any
+occurrence changes the whole series; the edit form retains its original start date.
+Monthly and yearly rules clamp unavailable days without moving the original anchor
+(January 31 returns to March 31; leap-day yearly rules return to February 29 in leap years).
+Dates and optional wall-clock times remain local, including during DST changes.
+
+The existing `family-calendar.events.v1` array stores one event per series, with an
+optional `recurrence: { frequency, endDate? }` rule. Missing recurrence means Never;
+no migration or occurrence records are written. Labels and their colors retain the
+existing separate storage. Invalid rules and end dates before the start are rejected
+before saving. Stored invalid records follow the existing skip-on-read behavior.
+
+`expandEvents` takes an inclusive local-date range of at most 3660 days and returns
+sorted occurrences without changing the stored series. Calendar views request only
+their visible dates. Upcoming includes recurring occurrences through one year from
+today; nonrecurring future events retain the existing unrestricted listing behavior.

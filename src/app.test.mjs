@@ -470,3 +470,56 @@ test("theme palettes provide readable text, controls and selected navigation", (
   // System uses the live browser media query; explicit choices are excluded.
   assert.match(css, /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\):not\(\[data-theme="dark"\]\)/);
 });
+
+
+test("recurrence form persists one series, edits the original anchor and deletes all occurrences", () => {
+  const f = fixture();
+  let app = f.app();
+  change(field(app.render(), "Title"), "Monthly plan");
+  change(field(app.render(), "Date"), "2024-01-31");
+  change(field(app.render(), "Time"), "09:30");
+  change(field(app.render(), "Notes"), "Keep\nnotes");
+  change(field(app.render(), "Repeat"), "Monthly");
+  change(field(app.render(), "Repeat until"), "2028-03-31");
+  submit(section(app.render(), "manage-events-heading"));
+  const saved = f.eventStore.list()[0];
+  assert.equal(f.eventStore.list().length, 1);
+  assert.deepEqual(saved.recurrence, { frequency: "Monthly", endDate: "2028-03-31" });
+  app = f.app();
+  button(app.render(), "Month").props.onClick();
+  const today = new Date();
+  const offset = (2024 - today.getFullYear()) * 12 + 1 - today.getMonth();
+  for (let i = 0; i < Math.abs(offset); i++) button(app.render(), offset < 0 ? "Previous month" : "Next month").props.onClick();
+  const month = section(app.render(), "monthly-calendar-heading");
+  const leapDay = nodes(month, node => node.type === "li" && node.props.className?.startsWith("month-day") && nodes(node, child => child.type === "time" && child.props.dateTime === "2024-02-29").length)[0];
+  button(leapDay, "Edit Monthly plan").props.onClick();
+  assert.equal(field(app.render(), "Date").props.value, "2024-01-31");
+  assert.equal(field(app.render(), "Repeat").props.value, "Monthly");
+  assert.equal(field(app.render(), "Repeat until").props.value, "2028-03-31");
+  assert.equal(field(app.render(), "Time").props.value, "09:30");
+  change(field(app.render(), "Title"), "Revised series");
+  submit(section(app.render(), "manage-events-heading"));
+  assert.equal(f.eventStore.list()[0].id, saved.id);
+  assert.equal(f.eventStore.list()[0].date, "2024-01-31");
+  f.confirm(true);
+  button(section(app.render(), "monthly-calendar-heading"), "Delete Revised series").props.onClick();
+  assert.match(f.prompts.at(-1), /all occurrences/);
+  assert.deepEqual(f.eventStore.list(), []);
+});
+
+test("invalid recurrence end date leaves saved data and form draft intact", () => {
+  const f = fixture();
+  const app = f.app();
+  change(field(app.render(), "Title"), "Invalid plan");
+  change(field(app.render(), "Date"), "2026-12-31");
+  change(field(app.render(), "Repeat"), "Weekly");
+  change(field(app.render(), "Repeat until"), "2026-12-30");
+  submit(section(app.render(), "manage-events-heading"));
+  assert.equal(f.writes(), 0);
+  assert.equal(field(app.render(), "Title").props.value, "Invalid plan");
+  assert.match(text(nodes(app.render(), node => node.props.role === "alert")[0]), /end date/);
+  change(field(app.render(), "Repeat"), "Never");
+  assert.equal(field(app.render(), "Repeat until"), undefined);
+  submit(section(app.render(), "manage-events-heading"));
+  assert.equal(f.eventStore.list()[0].recurrence, undefined);
+});
