@@ -1,0 +1,9 @@
+engineStrict: true
+saveExact: true
+ignoreScripts: true
+audit: false
+fund: false
+
+# The existing Studio wrapper resolves exact top-level dependency paths,
+# including scheduler, and runs Node with --preserve-symlinks.
+nodeLinker: hoisted

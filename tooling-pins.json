@@ -7,15 +7,22 @@
     "typescript": "5.9.3",
     "vite": "7.3.6"
   },
-  "dependency_lock_sha256": "1a820e0eb96a67823ea1ccf617b34510dcb27da0050fc5bfcd2fbab8c6ce6007",
+  "dependency_lock_file": "pnpm-lock.yaml",
+  "dependency_lock_sha256": "2945c3de7b6f910e8e6b1aa29f393fd8eb3f7dc7629d98f2495ec2f463ea2496",
   "node_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
   "node_version": "24.18.0",
-  "npm_cli_sha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
-  "npm_version": "10.5.0",
-  "qualified_process_policy": "appcontainer_single_process_node_v1",
-  "retained_disposable_bundle": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\tool-bundle",
-  "retained_disposable_runtime": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\runtime\\node.exe",
-  "schema_version": 1,
-  "tool_inventory_sha256": "a5ff218b6e01db24ed40022848a3cc14ff500b89094a468923d6b5c9d7d23765",
+  "pnpm_cli_sha256": "ff3224d46b47fbb24a7e9fe15fededef7e00892d07d4e376b6762d4899906bfd",
+  "pnpm_bundle_sha256": "edcb104ad0d162af32b3c8a24ba0c391513bb66c74cba852d072db0bf490c067",
+  "pnpm_version": "11.9.0",
+  "schema_version": 2,
+  "historical_npm_qualification": {
+    "dependency_lock_sha256": "1a820e0eb96a67823ea1ccf617b34510dcb27da0050fc5bfcd2fbab8c6ce6007",
+    "npm_cli_sha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "npm_version": "10.5.0",
+    "qualified_process_policy": "appcontainer_single_process_node_v1",
+    "retained_disposable_bundle": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\tool-bundle",
+    "retained_disposable_runtime": "C:\\Users\\nickb\\AppData\\Local\\Temp\\family-calendar-owner-validation-df66ea76e5744e01a260baad6c89265d\\attempt-62e4a2d2d08245ebb9351978bc735ece\\runtime\\node.exe",
+    "tool_inventory_sha256": "a5ff218b6e01db24ed40022848a3cc14ff500b89094a468923d6b5c9d7d23765"
+  },
   "vite_wrapper_sha256": "0123855f194127a493cab4c61bd5d4bc358b2eff8defb46d47daa4096a658fdf"
 }
