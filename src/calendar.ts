@@ -1,4 +1,6 @@
-import { dateKey, expandEvents, localDate, type CalendarEvent } from "./events";
+// Node's strip-types runner requires the source extension; Vite resolves it too.
+// @ts-expect-error TS5097: retain the explicit extension without changing compiler configuration.
+import { dateKey, expandEvents, localDate, type CalendarEvent } from "./events.ts";
 
 /** Complete Monday-first weeks covering the requested month, including adjacent dates. */
 export function monthDays(anchor: Date, offset = 0): Date[] {
