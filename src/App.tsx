@@ -92,11 +92,16 @@ export function App() {
       {label.kind}: {label.name}
     </span> : null;
   }
+  function recurrenceIndicator(event: CalendarEvent) {
+    return event.recurrence && event.recurrence.frequency !== "Never" ?
+      <span className="recurrence-indicator">Repeats {event.recurrence.frequency.toLowerCase()}</span> : null;
+  }
   function renderEvent(event: CalendarEvent) {
     return <li key={`${event.id}:${event.date}`}>
       <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.date} · {event.time ?? "All day"}</time> {event.title}{" "}
       {eventActions(event)}
       {eventLabel(event)}
+      {recurrenceIndicator(event)}
       {eventNotes(event)}
     </li>;
   }
@@ -163,6 +168,7 @@ export function App() {
                       <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.time ?? "All day"}</time>
                       <span>{event.title}</span>
                       {eventLabel(event)}
+                      {recurrenceIndicator(event)}
                       {eventActions(event)}
                       {eventNotes(event)}
                     </li>)}</ul> :
@@ -199,6 +205,7 @@ export function App() {
                     <span>{event.title}</span>
                     {eventLabel(event)}
                   </button>
+                  {recurrenceIndicator(event)}
                   {eventActions(event)}
                   {eventNotes(event)}
                 </li>)}</ul>

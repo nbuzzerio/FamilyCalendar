@@ -203,4 +203,5 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 input, textarea, select, dialog { background: var(--surface); color: var(--text); }
 dialog { border: 1px solid var(--control-border); }
 .appearance-selector { margin: 1rem 0; }
+.recurrence-indicator { display: inline-block; font-size: 0.75rem; color: var(--muted); border: 1px solid currentColor; border-radius: 0.25rem; padding: 0.1rem 0.3rem; overflow-wrap: anywhere; }
 .appearance-selector label { display: grid; gap: 0.5rem; max-width: 14rem; }

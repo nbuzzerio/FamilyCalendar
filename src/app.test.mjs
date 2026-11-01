@@ -640,3 +640,82 @@ test("focus restoration checks removed occurrences after commit and clears stale
   app.render({}, attachTitle);
   assert.equal(titleFocus, 3);
 });
+
+for (const view of ["week", "month", "three-months", "upcoming"]) {
+  test(`recurring ${view} entry preserves identity, inclusive end and whole-series actions`, () => {
+    const date = events.dateKey(new Date());
+    const original = { id: "series", title: "Repeating plan", date: "2000-01-01", time: "09:15", notes: "Series notes", recurrence: { frequency: "Daily", endDate: date } };
+    const single = { id: "single", title: "Single plan", date };
+    const f = fixture([original, single]);
+    const app = f.app();
+    if (view === "month") button(app.render(), "Month").props.onClick();
+    if (view === "three-months") button(app.render(), "3 Months").props.onClick();
+    const heading = { week: "weekly-calendar-heading", month: "monthly-calendar-heading", "three-months": "selected-day-heading", upcoming: "upcoming-events-heading" }[view];
+    const displayed = () => section(app.render(), heading);
+    const badges = nodes(displayed(), node => node.props.className === "recurrence-indicator");
+    assert.ok(badges.length > 0);
+    assert.ok(badges.every(badge => text(badge) === "Repeats daily"));
+    assert.ok(button(displayed(), "Edit Single plan"));
+    if (view === "upcoming" || view === "three-months") assert.equal(badges.length, 1);
+    button(displayed(), "Edit Repeating plan").props.onClick();
+    assert.equal(field(app.render(), "Date").props.value, original.date);
+    assert.equal(field(app.render(), "Notes").props.value, original.notes);
+    change(field(app.render(), "Title"), "Revised plan");
+    f.confirm(true);
+    submit(section(app.render(), "manage-events-heading"));
+    assert.ok(button(displayed(), "Edit Revised plan"));
+    assert.equal(button(displayed(), "Edit Repeating plan"), undefined);
+    button(displayed(), "Delete Revised plan").props.onClick();
+    assert.match(f.prompts.at(-1), /all occurrences/);
+    assert.equal(button(displayed(), "Edit Revised plan"), undefined);
+    assert.deepEqual(f.eventStore.list(), [single]);
+  });
+}
+
+test("month and three-month navigation render clamped leap and month-end occurrences with selected-day counts", () => {
+  const f = fixture([
+    { id: "monthly", title: "Month end", date: "2024-01-31", recurrence: { frequency: "Monthly", endDate: "2025-03-31" } },
+    { id: "yearly", title: "Leap anniversary", date: "2024-02-29", recurrence: { frequency: "Yearly", endDate: "2025-02-28" } },
+  ]);
+  const app = f.app();
+  button(app.render(), "Month").props.onClick();
+  const today = new Date();
+  const offset = (2024 - today.getFullYear()) * 12 + 11 - today.getMonth();
+  for (let i = 0; i < Math.abs(offset); i++) button(app.render(), offset < 0 ? "Previous month" : "Next month").props.onClick();
+  for (const date of ["2024-12-31", "2025-01-31", "2025-02-28", "2025-03-31"]) {
+    const month = section(app.render(), "monthly-calendar-heading");
+    const cell = nodes(month, node => node.props.className?.startsWith("month-day") && nodes(node, child => child.type === "time" && child.props.dateTime === date).length)[0];
+    assert.ok(button(cell, "Edit Month end"), date);
+    if (date === "2025-02-28") assert.ok(button(cell, "Edit Leap anniversary"));
+    button(app.render(), "Next month").props.onClick();
+  }
+  // April's grid retains March 31 as an adjacent date, but no April occurrence.
+  assert.deepEqual(nodes(section(app.render(), "monthly-calendar-heading"), node => node.props.className === "month-event").map(node => nodes(node, child => child.type === "time")[0].props.dateTime), ["2025-03-31"]);
+  button(app.render(), "Previous month").props.onClick();
+  button(app.render(), "Previous month").props.onClick();
+  button(app.render(), "3 Months").props.onClick();
+  const day = nodes(app.render(), node => node.props.className === "compact-date" && node.props["aria-label"].startsWith("Friday, February 28, 2025"))[0];
+  assert.match(day.props["aria-label"], /2 events/);
+  day.props.onClick();
+  const selected = section(app.render(), "selected-day-heading");
+  assert.ok(button(selected, "Edit Month end"));
+  assert.ok(button(selected, "Edit Leap anniversary"));
+  button(app.render(), "Next 3 months").props.onClick();
+  assert.equal(button(section(app.render(), "selected-day-heading"), "Edit Month end"), undefined);
+});
+
+test("upcoming recurrence expansion is bounded, inclusive, unique and ordered while distant singles remain", () => {
+  const input = [
+    { id: "daily", title: "Daily", date: "1900-01-01", time: "12:00", recurrence: { frequency: "Daily" } },
+    { id: "end", title: "End", date: "2024-02-28", recurrence: { frequency: "Daily", endDate: "2024-02-29" } },
+    { id: "single", title: "Distant", date: "2040-01-01" },
+  ];
+  const result = calendar.upcomingEvents(input, "2024-02-29");
+  assert.equal(result.filter(event => event.id === "daily").length, 367);
+  assert.equal(result.filter(event => event.id === "end").length, 1);
+  assert.equal(result[0].id, "end");
+  assert.equal(result.at(-1).id, "single");
+  assert.equal(result.filter(event => event.id === "daily").at(-1).date, "2025-03-01");
+  assert.equal(new Set(result.map(event => `${event.id}:${event.date}`)).size, result.length);
+  assert.equal(input[0].date, "1900-01-01");
+});
