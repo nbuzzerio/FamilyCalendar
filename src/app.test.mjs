@@ -15,14 +15,21 @@ const require = createRequire(import.meta.url);
 function harness(file, dependencies, window = {}) {
   const state = [];
   let cursor = 0;
+  let effects = [];
   const hooks = {
     useState(initial) {
       const index = cursor++;
       if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
       return [state[index], next => { state[index] = typeof next === "function" ? next(state[index]) : next; }];
     },
-    useRef: () => ({ current: null }),
-    useEffect: () => {},
+    useRef(initial) {
+      const index = cursor++;
+      if (!(index in state)) state[index] = { current: initial };
+      return state[index];
+    },
+    // Run per-render focus effects after the simulated commit. Mount subscriptions
+    // remain outside this handler harness (no browser event target is provided).
+    useEffect(effect, dependencies) { if (dependencies === undefined) effects.push(effect); },
   };
   const output = ts.transpileModule(readFileSync(new URL(file, import.meta.url), "utf8"), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -35,7 +42,13 @@ function harness(file, dependencies, window = {}) {
     throw new Error(`Unexpected dependency ${name}`);
   }, exports, window);
   const Component = Object.values(exports)[0];
-  return { render(props = {}) { cursor = 0; return Component(props); } };
+  return { render(props = {}, commit = () => {}) {
+    cursor = 0; effects = [];
+    const tree = Component(props);
+    commit(tree);
+    effects.forEach(effect => effect());
+    return tree;
+  } };
 }
 
 function nodes(tree, predicate) {
@@ -498,6 +511,7 @@ test("recurrence form persists one series, edits the original anchor and deletes
   assert.equal(field(app.render(), "Repeat until").props.value, "2028-03-31");
   assert.equal(field(app.render(), "Time").props.value, "09:30");
   change(field(app.render(), "Title"), "Revised series");
+  f.confirm(true);
   submit(section(app.render(), "manage-events-heading"));
   assert.equal(f.eventStore.list()[0].id, saved.id);
   assert.equal(f.eventStore.list()[0].date, "2024-01-31");
@@ -518,8 +532,111 @@ test("invalid recurrence end date leaves saved data and form draft intact", () =
   assert.equal(f.writes(), 0);
   assert.equal(field(app.render(), "Title").props.value, "Invalid plan");
   assert.match(text(nodes(app.render(), node => node.props.role === "alert")[0]), /end date/);
+  const end = field(app.render(), "Repeat until");
+  assert.equal(end.props.value, "2026-12-30");
+  assert.equal(end.props["aria-invalid"], true);
+  assert.ok(end.props["aria-describedby"].includes("recurrence-end-error"));
   change(field(app.render(), "Repeat"), "Never");
   assert.equal(field(app.render(), "Repeat until"), undefined);
   submit(section(app.render(), "manage-events-heading"));
   assert.equal(f.eventStore.list()[0].recurrence, undefined);
+});
+
+for (const frequency of ["Never", "Daily", "Weekly", "Monthly", "Yearly"]) {
+  for (const endDate of ["", "2028-12-31"]) {
+    if (frequency === "Never" && endDate) continue;
+    test(`create and reload ${frequency} with ${endDate || "no end date"} preserves details`, () => {
+      const f = fixture();
+      const label = f.labelStore.create({ name: "Family", kind: "Category", color: "#123456" });
+      let app = f.app();
+      assert.equal(field(app.render(), "Repeat").props.value, "Never");
+      change(field(app.render(), "Title"), "Family plan");
+      change(field(app.render(), "Date"), "2026-01-31");
+      change(field(app.render(), "Time"), "18:45");
+      change(field(app.render(), "Notes"), "First line\nSecond line");
+      change(field(app.render(), "Person or category"), label.id);
+      change(field(app.render(), "Repeat"), frequency);
+      if (frequency !== "Never") change(field(app.render(), "Repeat until"), endDate);
+      submit(section(app.render(), "manage-events-heading"));
+      assert.equal(f.eventStore.list().length, 1);
+      const saved = f.eventStore.list()[0];
+      assert.deepEqual(saved.recurrence, frequency === "Never" ? undefined : { frequency, ...(endDate ? { endDate } : {}) });
+      app = f.app();
+      button(app.render(), "Edit Family plan").props.onClick();
+      for (const [name, expected] of [["Title", "Family plan"], ["Date", "2026-01-31"], ["Time", "18:45"], ["Notes", "First line\nSecond line"], ["Person or category", label.id], ["Repeat", frequency]]) {
+        assert.equal(field(app.render(), name).props.value, expected);
+      }
+      if (frequency !== "Never") assert.equal(field(app.render(), "Repeat until").props.value, endDate);
+      assert.equal(f.labelStore.list()[0].color, "#123456");
+    });
+  }
+}
+
+test("series edit and delete confirmations cancel without writes and accepted edits replace all occurrences", () => {
+  const date = events.dateKey(new Date());
+  const original = { id: "series", title: "Original series", date, time: "08:15", notes: "Keep\nnotes", recurrence: { frequency: "Daily" } };
+  const f = fixture([original, { id: "legacy", title: "Legacy", date }]);
+  const app = f.app();
+  let focused = 0;
+  const trigger = { isConnected: true, focus() { focused++; } };
+  button(app.render(), "Edit Original series").props.onClick({ currentTarget: trigger });
+  change(field(app.render(), "Title"), "Changed series");
+  change(field(app.render(), "Repeat"), "Weekly");
+  const before = f.storage.getItem(events.EVENTS_STORAGE_KEY);
+  submit(section(app.render(), "manage-events-heading"));
+  assert.match(f.prompts.at(-1), /entire series "Original series".*All occurrences/);
+  assert.equal(f.writes(), 0);
+  assert.equal(f.storage.getItem(events.EVENTS_STORAGE_KEY), before);
+  assert.equal(field(app.render(), "Title").props.value, "Changed series");
+  button(app.render(), "Delete Original series").props.onClick();
+  assert.match(f.prompts.at(-1), /all occurrences/);
+  assert.equal(f.writes(), 0);
+  f.confirm(true);
+  submit(section(app.render(), "manage-events-heading"));
+  app.render();
+  assert.equal(focused, 1);
+  assert.equal(f.eventStore.list().length, 2);
+  const saved = f.eventStore.list().find(event => event.id === "series");
+  assert.equal(saved.title, "Changed series");
+  assert.equal(saved.notes, original.notes);
+  assert.equal(saved.time, original.time);
+  const end = events.localDate(date); end.setDate(end.getDate() + 14);
+  const occurrences = events.expandEvents([saved], date, events.dateKey(end));
+  assert.equal(occurrences.length, 3);
+  assert.equal(new Set(occurrences.map(event => `${event.id}:${event.date}`)).size, 3);
+  button(app.render(), "Edit Changed series").props.onClick({ currentTarget: trigger });
+  change(field(app.render(), "Repeat"), "Never");
+  f.confirm(false);
+  submit(section(app.render(), "manage-events-heading"));
+  assert.equal(f.eventStore.list().find(event => event.id === "series").recurrence.frequency, "Weekly");
+  button(app.render(), "Cancel").props.onClick();
+  app.render();
+  assert.equal(focused, 2);
+  f.confirm(true);
+  button(app.render(), "Delete Changed series").props.onClick();
+  assert.deepEqual(f.eventStore.list(), [{ id: "legacy", title: "Legacy", date }]);
+});
+
+test("focus restoration checks removed occurrences after commit and clears stale edit triggers", () => {
+  const date = events.dateKey(new Date());
+  const f = fixture([{ id: "series", title: "Focus series", date, recurrence: { frequency: "Daily" } }]);
+  const app = f.app();
+  let titleFocus = 0;
+  const attachTitle = tree => { field(tree, "Title").props.ref.current = { focus() { titleFocus++; } }; };
+  app.render({}, attachTitle);
+  const trigger = { isConnected: true, focus() { assert.fail("Removed occurrence must not receive focus"); } };
+  button(app.render(), "Edit Focus series").props.onClick({ currentTarget: trigger });
+  assert.equal(titleFocus, 1);
+  change(field(app.render(), "Date"), "2035-01-01");
+  f.confirm(true);
+  submit(section(app.render(), "manage-events-heading"));
+  assert.equal(titleFocus, 1);
+  app.render({}, tree => { trigger.isConnected = false; attachTitle(tree); });
+  assert.equal(titleFocus, 2);
+  // A later create must focus its own form, even if the old trigger is connected.
+  trigger.isConnected = true;
+  change(field(app.render(), "Title"), "New event");
+  submit(section(app.render(), "manage-events-heading"));
+  app.render({}, attachTitle);
+  assert.equal(titleFocus, 3);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { dateKey, expandEvents, eventStore, type CalendarEvent, type RecurrenceFrequency } from "./events";
+import { dateKey, expandEvents, eventStore, isRecurrenceRule, type CalendarEvent, type RecurrenceFrequency } from "./events";
 import { monthDays, upcomingEvents, weekDays } from "./calendar";
 import { labelStore, labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
@@ -18,11 +18,26 @@ export function App() {
   const [notes, setNotes] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [endDateError, setEndDateError] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState<"week" | "month" | "three-months">("week");
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const titleInput = useRef<HTMLInputElement>(null);
+  const endDateInput = useRef<HTMLInputElement>(null);
+  const editTrigger = useRef<HTMLElement | null>(null);
+  const focusPending = useRef(false);
+  function restoreFocus() {
+    focusPending.current = true;
+  }
+  // Check connectivity after React removes any occurrences affected by the edit.
+  useEffect(() => {
+    if (!focusPending.current) return;
+    focusPending.current = false;
+    if (editTrigger.current?.isConnected) editTrigger.current.focus();
+    else titleInput.current?.focus();
+    editTrigger.current = null;
+  });
   useEffect(() => {
     const refresh = () => { setEvents(eventStore.list()); setLabels(labelStore.list()); };
     window.addEventListener("storage", refresh);
@@ -40,23 +55,27 @@ export function App() {
       return false;
     }
   }
-  function editEvent(occurrence: CalendarEvent) {
+  function editEvent(occurrence: CalendarEvent, trigger?: HTMLElement) {
+    editTrigger.current = trigger ?? null;
     const event = events.find(item => item.id === occurrence.id) ?? occurrence;
     setFrequency(event.recurrence?.frequency ?? "Never"); setEndDate(event.recurrence?.endDate ?? "");
     setEditing(event.id); setTitle(event.title); setEventDate(event.date); setEventTime(event.time ?? "");
     setNotes(event.notes ?? "");
     setLabelId(labels.some(label => label.id === event.labelId) ? event.labelId! : "");
-    setNotice(""); setError("");
+    setNotice(""); setError(""); setEndDateError("");
     titleInput.current?.focus();
   }
   function eventActions(event: CalendarEvent) {
     return <div className="event-actions">
-      <button type="button" onClick={() => editEvent(event)} aria-label={`Edit ${event.title}`}>Edit</button>
+      <button type="button" onClick={click => editEvent(event, click?.currentTarget)} aria-label={`Edit ${event.title}`}>Edit</button>
       <button type="button" onClick={() => {
         if (!window.confirm(`Delete "${event.title}"${event.recurrence && event.recurrence.frequency !== "Never" ? " and all occurrences" : ""}? This cannot be undone.`)) return;
         if (mutate(() => eventStore.delete(event.id))) {
           if (editing === event.id) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); }
           setNotice("Event deleted.");
+          setEndDateError("");
+          editTrigger.current = null;
+          restoreFocus();
         }
       }} aria-label={`Delete ${event.title}`}>Delete</button>
     </div>;
@@ -175,7 +194,7 @@ export function App() {
                   {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                 </time>{isToday && <span className="today-label">Today</span>}</h3>
                 <ul className="day-events">{dayEvents.map(event => <li key={`${event.id}:${event.date}`}>
-                  <button type="button" className="month-event" onClick={() => editEvent(event)} aria-label={`Edit ${event.title}`}>
+                  <button type="button" className="month-event" onClick={click => editEvent(event, click?.currentTarget)} aria-label={`Edit ${event.title}`}>
                     <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.time ?? "All day"}</time>
                     <span>{event.title}</span>
                     {eventLabel(event)}
@@ -246,25 +265,37 @@ export function App() {
         <h2 id="manage-events-heading">{editing ? "Edit event" : "Add event"}</h2>
         <form className="event-form" onSubmit={event => {
           event.preventDefault();
+          if (frequency !== "Never" && !isRecurrenceRule({ frequency, ...(endDate ? { endDate } : {}) }, eventDate)) {
+            setEndDateError("Enter a valid repeat end date on or after the event start date, or leave it blank for no end date.");
+            setError(""); setNotice("");
+            endDateInput.current?.focus();
+            return;
+          }
+          setEndDateError("");
+          const original = events.find(item => item.id === editing);
+          if (editing && (frequency !== "Never" || (original?.recurrence && original.recurrence.frequency !== "Never")) &&
+            !window.confirm(`Save changes to the entire series "${original?.title ?? title}"? All occurrences of this series will be affected.`)) return;
           if (mutate(() => {
             const input = { title, date: eventDate, notes, ...(frequency === "Never" ? {} : { recurrence: { frequency, ...(endDate ? { endDate } : {}) } }), ...(labels.some(label => label.id === labelId) ? { labelId } : {}), ...(eventTime ? { time: eventTime } : {}) };
             if (editing) eventStore.update(editing, input);
             else eventStore.create(input);
-          })) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setNotice(editing ? "Event updated." : "Event added."); }
+          })) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setNotice(editing ? "Event updated." : "Event added."); restoreFocus(); }
         }}>
           <label>Title <input ref={titleInput} required value={title} onChange={event => setTitle(event.target.value)} /></label>{" "}
           <label>Date <input required type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} /></label>{" "}
           <label>Time (optional) <input type="time" value={eventTime} onChange={event => setEventTime(event.target.value)} aria-describedby="event-time-help" /></label>
           <p id="event-time-help" className="form-help">Leave time blank for an all-day event. Times use your local clock.</p>
           <label>Repeat
-            <select value={frequency} onChange={event => { setFrequency(event.target.value as RecurrenceFrequency); if (event.target.value === "Never") setEndDate(""); }}>
+            <select aria-describedby="recurrence-help" value={frequency} onChange={event => { setFrequency(event.target.value as RecurrenceFrequency); setEndDateError(""); if (event.target.value === "Never") setEndDate(""); }}>
               {["Never", "Daily", "Weekly", "Monthly", "Yearly"].map(value => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
           {frequency !== "Never" && <label>Repeat until (optional, inclusive)
-            <input type="date" min={eventDate} value={endDate} onChange={event => setEndDate(event.target.value)} />
+            <input ref={endDateInput} type="date" value={endDate} aria-invalid={endDateError ? true : undefined} aria-describedby={`recurrence-end-help${endDateError ? " recurrence-end-error" : ""}`} onChange={event => setEndDate(event.target.value)} />
           </label>}
-          <p className="form-help">Editing or deleting a repeating event changes the entire series.</p>
+          {frequency !== "Never" && <p id="recurrence-end-help" className="form-help">Leave blank for no end date. Includes occurrences on this date; it must be on or after the event start date.</p>}
+          {endDateError && <p id="recurrence-end-error" role="alert">{endDateError}</p>}
+          <p id="recurrence-help" className="form-help">Editing or deleting a repeating event changes all occurrences of the entire series. Individual occurrences and future-only changes are not supported.</p>
           <label>Person or category (optional)
             <select value={labels.some(label => label.id === labelId) ? labelId : ""} onChange={event => setLabelId(event.target.value)}>
               <option value="">No label</option>
@@ -275,7 +306,7 @@ export function App() {
             <textarea rows={4} value={notes} onChange={event => setNotes(event.target.value)} />
           </label>
           <button type="submit">{editing ? "Save event" : "Add event"}</button>{" "}
-          {editing && <button type="button" onClick={() => { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setError(""); }}>Cancel</button>}
+          {editing && <button type="button" onClick={() => { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setError(""); setEndDateError(""); restoreFocus(); }}>Cancel</button>}
         </form>
         {error && <p role="alert">{error}</p>}
         <p role="status">{notice}</p>
