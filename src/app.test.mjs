@@ -131,8 +131,8 @@ test("month switching, navigation, event placement, editing and deletion share s
   f.storage.setItem(labels.LABELS_STORAGE_KEY, JSON.stringify([{ id: "person", name: "Alex", kind: "Person", color: "#123456" }]));
   const app = f.app();
   button(app.render(), "Previous week").props.onClick();
-  assert.match(text(section(app.render(), "weekly-calendar-heading")), /Week of/);
-  button(app.render(), "This week").props.onClick();
+  assert.match(text(nodes(app.render(), node => node.props.role === "status")[0]), /Week of/);
+  button(app.render(), "Today: This week").props.onClick();
   button(app.render(), "Month").props.onClick();
   const monthly = () => section(app.render(), "monthly-calendar-heading");
   assert.equal(section(app.render(), "weekly-calendar-heading"), undefined);
@@ -439,28 +439,6 @@ test("appearance selector applies and persists all choices and restores them on 
   }
 });
 
-test("compact dates support bounded keyboard movement without changing selection", () => {
-  const app = fixture().app();
-  button(app.render(), "3 Months").props.onClick();
-  const panel = nodes(app.render(), node => node.props.className === "compact-month")[0];
-  const list = nodes(panel, node => node.props.className === "compact-days")[0];
-  assert.ok(list.props["aria-label"]);
-  assert.equal(list.props["aria-describedby"], "compact-help");
-  const dates = nodes(panel, node => node.props.className === "compact-date");
-  let focused;
-  const controls = dates.map((_, index) => ({ focus() { focused = index; }, closest() { return { querySelectorAll: () => controls }; } }));
-  const selected = dates.map(date => date.props["aria-pressed"]);
-  for (const [index, key, expected] of [[10, "ArrowLeft", 9], [10, "ArrowRight", 11], [10, "ArrowUp", 3], [10, "ArrowDown", 17], [10, "Home", 0], [10, "End", dates.length - 1], [0, "ArrowUp", 0], [dates.length - 1, "ArrowRight", dates.length - 1]]) {
-    let prevented = false;
-    dates[index].props.onKeyDown({ key, currentTarget: controls[index], preventDefault() { prevented = true; } });
-    assert.equal(prevented, true);
-    assert.equal(focused, expected);
-  }
-  dates[0].props.onKeyDown({ key: "Tab", preventDefault() { assert.fail("Tab must keep native behavior"); } });
-  const after = nodes(app.render(), node => node.props.className === "compact-month")[0];
-  assert.deepEqual(nodes(after, node => node.props.className === "compact-date").map(date => date.props["aria-pressed"]), selected);
-});
-
 test("theme palettes provide readable text, controls and selected navigation", () => {
   const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
   const palettes = [...css.matchAll(/(?:^:root(?:\[data-theme="dark"\])?) \{([^}]+)\}/gm)]
@@ -603,6 +581,9 @@ test("series edit and delete confirmations cancel without writes and accepted ed
   assert.equal(saved.title, "Changed series");
   assert.equal(saved.notes, original.notes);
   assert.equal(saved.time, original.time);
+  const reloaded = events.createEventStore(() => f.storage).list();
+  assert.deepEqual(reloaded.find(event => event.id === saved.id), saved);
+  assert.deepEqual(reloaded.find(event => event.id === "legacy"), { id: "legacy", title: "Legacy", date });
   const end = events.localDate(date); end.setDate(end.getDate() + 14);
   const occurrences = events.expandEvents([saved], date, events.dateKey(end));
   assert.equal(occurrences.length, 3);
@@ -850,4 +831,73 @@ test("midnight scheduling follows local DST days rather than 24-hour intervals",
       stop();
     }
   } finally { if (oldTZ === undefined) delete process.env.TZ; else process.env.TZ = oldTZ; }
+});
+
+
+test("cross-view roving date selection and focus cross year boundaries; editors retain native keys", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(2024, 11, 31, 12).getTime() });
+  try {
+    const app = fixture().app();
+    const dates = tree => nodes(tree, node => node.props["data-calendar-date"]);
+    let focused;
+    const render = () => app.render({}, tree => dates(tree).forEach(node => node.props.ref({ focus() { focused = node.props["data-calendar-date"]; } })));
+    for (const view of ["Week", "Month", "3 Months"]) {
+      button(render(), view).props.onClick();
+      let controls = dates(render());
+      assert.equal(controls.filter(node => node.props.tabIndex === 0).length, 1);
+      let selected = controls.find(node => node.props["aria-pressed"]);
+      const source = {};
+      let prevented = false;
+      selected.props.onKeyDown({ key: "ArrowRight", target: source, currentTarget: source, preventDefault() { prevented = true; } });
+      assert.equal(prevented, true);
+      controls = dates(render());
+      assert.equal(focused, "2025-01-01");
+      assert.equal(controls.find(node => node.props.tabIndex === 0).props["data-calendar-date"], focused);
+      for (const key of [" ", "Enter", "n", "Tab"]) controls[0].props.onKeyDown({ key, target: source, currentTarget: source, preventDefault() { assert.fail(key); } });
+      controls[0].props.onKeyDown({ key: "ArrowDown", target: {}, currentTarget: source, preventDefault() { assert.fail("nested editor"); } });
+      button(render(), view === "Week" ? "Today: This week" : "Today").props.onClick();
+      const tree = render();
+      assert.equal(dates(tree).find(node => node.props.tabIndex === 0).props["data-calendar-date"], "2024-12-31");
+      assert.equal(nodes(tree, node => node.props["aria-current"] === "date")[0].props.dateTime, "2024-12-31");
+      assert.match(text(nodes(tree, node => node.props.role === "status")[0]), /Selected date Dec 31, 2024/);
+      for (const label of ["Title", "Date", "Time", "Repeat", "Notes"]) assert.equal(field(tree, label).props.onKeyDown, undefined);
+      const nav = nodes(tree, node => node.type === "nav" && node.props.className === "week-navigation")[0];
+      assert.equal(nodes(nav, node => node.type === "button").length, 3);
+      assert.ok(nodes(nav, node => node.type === "button").every(node => node.props.type === "button" && node.props.tabIndex === undefined && node.props.onKeyDown === undefined));
+    }
+  } finally { t.mock.timers.reset(); }
+});
+
+
+test("later compact selection keeps range, heading and selected control consistent after period moves", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(2024, 1, 29, 12).getTime() });
+  try {
+    const app = fixture().app();
+    button(app.render(), "3 Months").props.onClick();
+    const selected = key => nodes(app.render(), node => node.props["data-calendar-date"] === key)[0];
+    selected("2024-04-30").props.onClick();
+    for (const [action, key, range] of [["Next 3 months", "2024-07-30", "May 2024"], ["Previous 3 months", "2024-04-30", "February 2024"]]) {
+      button(app.render(), action).props.onClick();
+      assert.equal(selected(key).props["aria-pressed"], true);
+      assert.equal(selected(key).props.tabIndex, 0);
+      assert.match(text(section(app.render(), "selected-day-heading")), new RegExp(key));
+      assert.ok(text(nodes(app.render(), node => node.props.id === "three-month-calendar-heading")[0]).startsWith(range));
+    }
+    for (const view of ["Week", "Month", "3 Months"]) {
+      button(app.render(), view).props.onClick();
+      assert.equal(selected("2024-04-30").props["aria-pressed"], true);
+      button(app.render(), view === "Week" ? "Today: This week" : "Today").props.onClick();
+      assert.equal(selected("2024-02-29").props["aria-pressed"], true);
+      const status = () => text(nodes(app.render(), node => node.props.role === "status")[0]);
+      assert.match(status(), /Selected date Feb 29, 2024/);
+      const before = status();
+      change(field(app.render(), "Title"), "Unrelated draft");
+      assert.equal(status(), before);
+      // Return to the later date before switching views.
+      if (view === "Week") { for (let i = 0; i < 9; i++) button(app.render(), "Next week").props.onClick(); }
+      else if (view === "Month") { button(app.render(), "Next month").props.onClick(); button(app.render(), "Next month").props.onClick(); }
+      const later = nodes(app.render(), node => node.props["data-calendar-date"] === "2024-04-30")[0];
+      if (later) later.props.onClick();
+    }
+  } finally { t.mock.timers.reset(); }
 });
