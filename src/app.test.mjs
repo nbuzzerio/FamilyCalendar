@@ -869,6 +869,80 @@ test("cross-view roving date selection and focus cross year boundaries; editors 
 });
 
 
+test("Astra repair: backward and reverse boundaries retain compact range, heading and one roving stop across views", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(2025, 0, 1, 12).getTime() });
+  try {
+    for (const view of ["Week", "Month"]) {
+      for (const [keys, expected, range] of [
+        [["ArrowLeft"], "2024-12-31", ["December 2024", "February 2025"]],
+        [["ArrowLeft", "ArrowRight"], "2025-01-01", ["December 2024", "February 2025"]],
+        [["ArrowUp"], "2024-12-25", ["December 2024", "February 2025"]],
+        [["ArrowUp", "ArrowDown"], "2025-01-01", ["December 2024", "February 2025"]],
+        [Array(13).fill("ArrowDown"), "2025-04-02", ["April 2025", "June 2025"]],
+        [[...Array(13).fill("ArrowDown"), "ArrowUp"], "2025-03-26", ["March 2025", "May 2025"]],
+      ]) {
+        const app = fixture().app();
+        const dates = tree => nodes(tree, node => node.props["data-calendar-date"]);
+        let focused;
+        const render = () => app.render({}, tree => dates(tree).forEach(node => node.props.ref({ focus() { focused = node.props["data-calendar-date"]; } })));
+        button(render(), view).props.onClick();
+        for (const key of keys) {
+          const selected = dates(render()).find(node => node.props.tabIndex === 0);
+          const target = {};
+          selected.props.onKeyDown({ key, target, currentTarget: target, preventDefault() {} });
+          render();
+        }
+        assert.equal(focused, expected); // Harness focus request, not native browser focus.
+        for (const nextView of ["3 Months", "Month", "Week", "3 Months"]) {
+          button(render(), nextView).props.onClick();
+          const tree = render();
+          const stops = dates(tree).filter(node => node.props.tabIndex === 0);
+          assert.equal(stops.length, 1);
+          assert.equal(stops[0].props["data-calendar-date"], expected);
+          assert.equal(stops[0].props["aria-pressed"], true);
+          assert.equal(button(tree, nextView).props["aria-pressed"], true);
+          assert.equal(nodes(tree, node => ["grid", "gridcell", "row"].includes(node.props.role)).length, 0);
+          if (nextView === "3 Months") {
+            const heading = text(nodes(tree, node => node.props.id === "three-month-calendar-heading")[0]);
+            assert.ok(heading.startsWith(range[0]) && heading.endsWith(range[1]), heading);
+            assert.match(text(section(tree, "selected-day-heading")), new RegExp(expected));
+          }
+        }
+      }
+    }
+  } finally { t.mock.timers.reset(); }
+});
+
+test("Today aligns displayed period, heading, selection and current date in every view", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(2025, 0, 1, 12).getTime() });
+  try {
+    for (const view of ["Week", "Month", "3 Months"]) {
+      const app = fixture().app();
+      button(app.render(), view).props.onClick();
+      button(app.render(), view === "Week" ? "Next week" : view === "Month" ? "Next month" : "Next 3 months").props.onClick();
+      button(app.render(), view === "Week" ? "Today: This week" : "Today").props.onClick();
+      const tree = app.render();
+      const stops = nodes(tree, node => node.props["data-calendar-date"] && node.props.tabIndex === 0);
+      assert.equal(stops.length, 1);
+      assert.equal(stops[0].props["data-calendar-date"], "2025-01-01");
+      assert.equal(stops[0].props["aria-pressed"], true);
+      assert.equal(nodes(stops[0], node => node.props["aria-current"] === "date")[0].props.dateTime, "2025-01-01");
+      const status = text(nodes(tree, node => node.props.role === "status")[0]);
+      assert.equal(status, `${view === "Week" ? "Week of Dec 30, 2024" : view === "Month" ? "January 2025" : "January 2025 through March 2025"}. Selected date Jan 1, 2025.`);
+      const heading = text(nodes(tree, node => node.type === "h2")[0]);
+      if (view === "Week") {
+        assert.equal(heading, "This week");
+        const week = text(section(tree, "weekly-calendar-heading"));
+        assert.ok(week.includes("Dec 30, 2024") && week.includes("Jan 5, 2025"));
+      } else if (view === "Month") assert.equal(heading, "January 2025");
+      else {
+        assert.ok(heading.startsWith("January 2025") && heading.endsWith("March 2025"));
+        assert.match(text(section(tree, "selected-day-heading")), /2025-01-01/);
+      }
+    }
+  } finally { t.mock.timers.reset(); }
+});
+
 test("later compact selection keeps range, heading and selected control consistent after period moves", t => {
   t.mock.timers.enable({ apis: ["Date"], now: new Date(2024, 1, 29, 12).getTime() });
   try {

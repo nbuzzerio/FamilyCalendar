@@ -26,7 +26,19 @@ export function App() {
   const period = view === "three-months" ? compactStart : navigation.date;
   const month = new Date(period.getFullYear(), period.getMonth(), 1, 12);
   const selectedDate = dateKey(navigation.date);
-  const setSelectedDate = (key: string) => setNavigation(navigationDate(new Date(`${key}T12:00:00`)));
+  // Astra ea0da20c: selection must remain reachable when returning to 3 Months.
+  function reconcileCompactRange(date: Date) {
+    setCompactStart(current => {
+      const start = new Date(current.getFullYear(), current.getMonth(), 1, 12);
+      const end = new Date(current.getFullYear(), current.getMonth() + 3, 1, 12);
+      return date < start || date >= end ? date : current;
+    });
+  }
+  const setSelectedDate = (key: string) => {
+    const next = navigationDate(new Date(`${key}T12:00:00`));
+    setNavigation(next);
+    reconcileCompactRange(next.date);
+  };
   const dateFocus = useRef<string | null>(null);
   const dateControls = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
@@ -46,7 +58,6 @@ export function App() {
     const key = dateKey(next);
     dateFocus.current = key;
     setSelectedDate(key);
-    if (view === "three-months" && (next < month || next >= new Date(month.getFullYear(), month.getMonth() + 3, 1, 12))) setCompactStart(next);
   }
   function dateProps(date: Date) {
     const key = dateKey(date);
@@ -183,7 +194,7 @@ export function App() {
       <nav className="view-selector" aria-label="Calendar view">
         <button type="button" aria-pressed={view === "week"} onClick={() => setView("week")}>Week</button>
         <button type="button" aria-pressed={view === "month"} onClick={() => setView("month")}>Month</button>
-        <button type="button" aria-pressed={view === "three-months"} onClick={() => setView("three-months")}>3 Months</button>
+        <button type="button" aria-pressed={view === "three-months"} onClick={() => { reconcileCompactRange(navigation.date); setView("three-months"); }}>3 Months</button>
       </nav>
       <p className="visually-hidden" role="status" aria-atomic="true">{view === "week" ? `Week of ${formatDate(days[0])}` : view === "month" ? monthTitle(month) : `${monthTitle(threeMonths[0])} through ${monthTitle(threeMonths[2])}`}. Selected date {formatDate(navigation.date)}.</p>
       {view === "week" ?
