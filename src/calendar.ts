@@ -35,3 +35,40 @@ export function upcomingEvents(events: CalendarEvent[], today: string): Calendar
   return [...single.filter(event => event.date >= today), ...expandEvents(recurring, today, dateKey(end))].sort((a, b) =>
     a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title));
 }
+
+/** Navigation retains the desired day even when the displayed date is clamped. */
+export type NavigationDate = { date: Date; day: number };
+export function navigationDate(date: Date): NavigationDate {
+  return { date: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12), day: date.getDate() };
+}
+export function moveDate(current: NavigationDate, amount: number, unit: "week" | "month" | "year"): NavigationDate {
+  if (unit === "week") {
+    const date = new Date(current.date);
+    date.setDate(date.getDate() + amount * 7);
+    return navigationDate(date);
+  }
+  const first = new Date(current.date.getFullYear(), current.date.getMonth() + (unit === "year" ? amount * 12 : amount), 1, 12);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0, 12).getDate();
+  first.setDate(Math.min(current.day, last));
+  return { date: first, day: current.day };
+}
+
+/** Refresh independently of navigation; reschedule from the real clock after sleep. */
+export function watchToday(refresh: (date: Date) => void, host: {
+  now: () => Date;
+  schedule: (callback: () => void, delay: number) => unknown;
+  cancel: (timer: unknown) => void;
+  listen: (callback: () => void) => () => void;
+}): () => void {
+  let timer: unknown;
+  const update = () => {
+    host.cancel(timer);
+    const now = host.now();
+    refresh(now);
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    timer = host.schedule(update, midnight.getTime() - now.getTime());
+  };
+  const unlisten = host.listen(update);
+  update();
+  return () => { host.cancel(timer); unlisten(); };
+}
