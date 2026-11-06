@@ -66,6 +66,25 @@ const field = (tree, label) => nodes(nodes(tree, node => node.type === "label" &
 const change = (control, value) => control.props.onChange({ target: { value } });
 const submit = tree => nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
 
+test("export action is explicit, accessible and reports download or failure without storage writes", () => {
+  const f = fixture([{ id: "saved", title: "Saved", date: "2024-01-01", recurrence: { frequency: "Daily" } }]);
+  let calls = 0;
+  f.dependencies["./backup"].downloadBackup = () => { calls++; };
+  const app = f.app();
+  const before = f.storage.getItem(events.EVENTS_STORAGE_KEY);
+  const action = button(app.render(), "Export backup");
+  assert.equal(calls, 0);
+  assert.equal(action.props.type, "button");
+  action.props.onClick();
+  assert.equal(calls, 1);
+  assert.ok(nodes(app.render(), node => node.props.role === "status" && text(node).includes("download requested")).length);
+  f.dependencies["./backup"].downloadBackup = () => { throw new Error("denied"); };
+  button(app.render(), "Export backup").props.onClick();
+  assert.ok(nodes(app.render(), node => node.props.role === "alert" && text(node).includes("Saved data was not changed")).length);
+  assert.equal(f.writes(), 0);
+  assert.equal(f.storage.getItem(events.EVENTS_STORAGE_KEY), before);
+});
+
 test("monthly dates cover aligned Monday-first weeks, leap years, and year boundaries", () => {
   for (const [year, month, first, last, count] of [
     [2024, 1, "2024-01-29", "2024-03-03", 35],
@@ -104,7 +123,7 @@ function fixture(initial = []) {
   const labelStore = labels.createLabelStore(() => storage);
   const prompts = [];
   let confirm = false;
-  const dependencies = { "./events": { ...events, eventStore }, "./labels": { ...labels, labelStore }, "./calendar": calendar, "./LabelManager": { LabelManager() {} }, "./AppearanceSelector": { AppearanceSelector() {} } };
+  const dependencies = { "./backup": { downloadBackup() {} }, "./events": { ...events, eventStore }, "./labels": { ...labels, labelStore }, "./calendar": calendar, "./LabelManager": { LabelManager() {} }, "./AppearanceSelector": { AppearanceSelector() {} } };
   const app = () => harness("./App.tsx", dependencies, { confirm(message) { prompts.push(message); return confirm; } });
   return { storage, eventStore, labelStore, prompts, app, dependencies,
     confirm: value => { confirm = value; }, fail: () => { failWrites = true; }, writes: () => writes };

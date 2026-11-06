@@ -6,6 +6,16 @@ browser's localStorage; there is no authentication, backend, sync or hosting set
 
 ## Events
 
+Use **Export backup** to download `family-calendar-backup-v1.json` containing
+the saved event and label arrays in a `family-calendar-backup` envelope with
+`version: 1`. All stored fields, IDs, colors, notes and recurrence definitions
+are preserved; series are not expanded. Export reads saved browser data afresh,
+including events outside the visible dates, and does not include unsaved edits
+or appearance preferences. It never writes to storage. Invalid JSON, invalid
+records or unavailable storage prevent export rather than producing a partial
+backup. Missing storage keys export as empty arrays. Keep the file private.
+This ticket provides export only; no import or restore is available.
+
 Use Add event to create an event with a title, local calendar date, and optional
 local time. Leave time blank for an all-day event. The weekly calendar displays
 events on their saved dates, with all-day events first, followed by timed events

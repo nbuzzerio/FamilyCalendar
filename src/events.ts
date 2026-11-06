@@ -80,7 +80,7 @@ export function expandEvents(events: CalendarEvent[], start: string, end: string
   return result.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "") || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 }
 
-function isEvent(value: unknown): value is CalendarEvent {
+export function isEvent(value: unknown): value is CalendarEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
   return typeof event.id === "string" && event.id.trim().length > 0 &&

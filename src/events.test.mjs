@@ -1,5 +1,55 @@
 import { test } from "node:test";
+import { serializeBackup, downloadBackup } from "./backup.ts";
 import assert from "node:assert/strict";
+
+test("backup deterministically preserves complete stored schema, Unicode, duplicate IDs and series without writes", () => {
+  const events = ["Never", "Daily", "Weekly", "Monthly", "Yearly"].map(frequency => ({
+    id: frequency, title: "家族 🎉", date: "2024-02-29", time: "23:59", notes: "é\n  <notes>\\\"", labelId: "missing",
+    recurrence: { frequency, ...(frequency === "Never" ? {} : { endDate: "2030-12-31" }) },
+  }));
+  events.push({ id: "legacy", title: "Legacy", date: "2020-01-01" }, { ...events[0] });
+  const labels = [{ id: "p", name: "Zoë", kind: "Person", color: "#AbCdEf" }, { id: "c", name: "学校", kind: "Category", color: "#000000" }];
+  const saved = new Map([[EVENTS_STORAGE_KEY, JSON.stringify(events)], [LABELS_STORAGE_KEY, JSON.stringify(labels)], ["unrelated", "keep"]]);
+  const before = [...saved];
+  const storage = { getItem: key => saved.get(key) ?? null, setItem() { assert.fail("export wrote storage"); } };
+  const json = serializeBackup(storage);
+  assert.equal(serializeBackup(storage), json);
+  const payload = JSON.parse(json);
+  assert.deepEqual(payload, { format: "family-calendar-backup", version: 1, events, labels });
+  assert.deepEqual([...saved], before);
+  assert.deepEqual(createEventStore(() => storage).list(), createEventStore(() => ({ getItem: key => new Map(before).get(key) })).list());
+  assert.equal(payload.events.length, 7); // No occurrence expansion or duplicate filtering.
+  assert.deepEqual(JSON.parse(serializeBackup({ getItem: () => null })).events, []);
+});
+
+test("backup refuses malformed or unavailable storage rather than silently losing records", () => {
+  for (const raw of ["{", "null", "{}", "[null]", '[{"id":"x","title":"X","date":"2024-01-01","notes":42}]']) {
+    for (const key of [EVENTS_STORAGE_KEY, LABELS_STORAGE_KEY]) {
+      assert.throws(() => serializeBackup({ getItem: requested => requested === key ? raw : null }));
+    }
+  }
+  assert.throws(() => serializeBackup({ getItem() { throw new Error("denied"); } }), /denied/);
+});
+
+test("download creates a JSON file only on invocation and cleans up its link and URL", async () => {
+  const previous = globalThis.document;
+  const create = URL.createObjectURL, revoke = URL.revokeObjectURL;
+  let blob, clicked = 0, removed = 0, revoked = 0;
+  const link = { click() { clicked++; }, remove() { removed++; } };
+  try {
+    URL.createObjectURL = value => { blob = value; return "blob:backup"; };
+    URL.revokeObjectURL = value => { assert.equal(value, "blob:backup"); revoked++; };
+    globalThis.document = { createElement: tag => { assert.equal(tag, "a"); return link; }, body: { appendChild: value => assert.equal(value, link) } };
+    downloadBackup({ getItem: () => null });
+    assert.equal(clicked, 1);
+    assert.equal(removed, 1);
+    assert.equal(link.download, "family-calendar-backup-v1.json");
+    assert.equal(blob.type, "application/json;charset=utf-8");
+    assert.equal(JSON.parse(await blob.text()).version, 1);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.equal(revoked, 1);
+  } finally { globalThis.document = previous; URL.createObjectURL = create; URL.revokeObjectURL = revoke; }
+});
 import { createEventStore, expandEvents, localDate, dateKey, isLocalDate, isLocalTime, EVENTS_STORAGE_KEY } from "./events.ts";
 import { upcomingEvents, weekDays } from "./calendar.ts";
 import { createLabelStore, LABELS_STORAGE_KEY, labelTextColor } from "./labels.ts";

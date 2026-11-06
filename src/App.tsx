@@ -4,6 +4,7 @@ import { monthDays, upcomingEvents, weekDays } from "./calendar";
 import { labelStore, labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
 import { AppearanceSelector } from "./AppearanceSelector";
+import { downloadBackup } from "./backup";
 
 export function App() {
   const [events, setEvents] = useState(() => eventStore.list());
@@ -17,6 +18,8 @@ export function App() {
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
   const [notice, setNotice] = useState("");
+  const [backupNotice, setBackupNotice] = useState("");
+  const [backupError, setBackupError] = useState("");
   const [error, setError] = useState("");
   const [endDateError, setEndDateError] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
@@ -126,6 +129,18 @@ export function App() {
       <h1>Family Calendar</h1>
       <AppearanceSelector />
       <p>A private calendar for our family.</p>
+      <button type="button" onClick={() => {
+        try {
+          downloadBackup();
+          setBackupError("");
+          setBackupNotice("Backup download requested. Keep this file private; it contains your saved events, notes and labels.");
+        } catch {
+          setBackupNotice("");
+          setBackupError("Backup could not be exported. Saved data was not changed. Check that browser storage is accessible and contains valid calendar data.");
+        }
+      }}>Export backup</button>
+      <p role="status">{backupNotice}</p>
+      {backupError && <p role="alert">{backupError}</p>}
       <nav className="view-selector" aria-label="Calendar view">
         <button type="button" aria-pressed={view === "week"} onClick={() => setView("week")}>Week</button>
         <button type="button" aria-pressed={view === "month"} onClick={() => setView("month")}>Month</button>

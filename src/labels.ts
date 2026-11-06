@@ -7,7 +7,7 @@ export interface CalendarLabel {
 export type LabelInput = Omit<CalendarLabel, "id">;
 export const LABELS_STORAGE_KEY = "family-calendar.labels.v1";
 
-function isLabel(value: unknown): value is CalendarLabel {
+export function isLabel(value: unknown): value is CalendarLabel {
   if (!value || typeof value !== "object") return false;
   const label = value as Record<string, unknown>;
   return typeof label.id === "string" && !!label.id.trim() &&
