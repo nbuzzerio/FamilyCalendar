@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { dateKey, expandEvents, eventStore, isRecurrenceRule, type CalendarEvent, type RecurrenceFrequency } from "./events";
-import { monthDays, upcomingEvents, weekDays } from "./calendar";
+import { monthDays, upcomingEvents, weekDays, navigationDate, moveDate, watchToday } from "./calendar";
 import { labelStore, labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
 import { AppearanceSelector } from "./AppearanceSelector";
@@ -22,10 +22,81 @@ export function App() {
   const [backupError, setBackupError] = useState("");
   const [error, setError] = useState("");
   const [endDateError, setEndDateError] = useState("");
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [today, setToday] = useState(() => new Date());
+  const [navigation, setNavigation] = useState(() => navigationDate(new Date()));
   const [view, setView] = useState<"week" | "month" | "three-months">("week");
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
-  const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
+  const [compactStart, setCompactStart] = useState(() => navigationDate(new Date()).date);
+  const period = view === "three-months" ? compactStart : navigation.date;
+  const month = new Date(period.getFullYear(), period.getMonth(), 1, 12);
+  const selectedDate = dateKey(navigation.date);
+  // Astra ea0da20c: selection must remain reachable when returning to 3 Months.
+  function reconcileCompactRange(date: Date) {
+    setCompactStart(current => {
+      const start = new Date(current.getFullYear(), current.getMonth(), 1, 12);
+      const end = new Date(current.getFullYear(), current.getMonth() + 3, 1, 12);
+      return date < start || date >= end ? date : current;
+    });
+  }
+  const setSelectedDate = (key: string) => {
+    const next = navigationDate(new Date(`${key}T12:00:00`));
+    setNavigation(next);
+    reconcileCompactRange(next.date);
+  };
+  const dateFocus = useRef<string | null>(null);
+  const dateControls = useRef(new Map<string, HTMLButtonElement>());
+  useEffect(() => {
+    if (!dateFocus.current) return;
+    dateControls.current.get(dateFocus.current)?.focus();
+    dateFocus.current = null;
+  });
+  function dateKeyDown(event: KeyboardEvent<HTMLButtonElement>, date: Date) {
+    if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const steps: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+    if (!(event.key in steps) && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const next = new Date(date);
+    if (event.key === "Home") next.setDate(1);
+    else if (event.key === "End") next.setMonth(next.getMonth() + 1, 0);
+    else next.setDate(next.getDate() + steps[event.key]);
+    const key = dateKey(next);
+    dateFocus.current = key;
+    setSelectedDate(key);
+  }
+  function dateProps(date: Date) {
+    const key = dateKey(date);
+    return {
+      "data-calendar-date": key,
+      ref: (control: HTMLButtonElement | null) => { if (control) dateControls.current.set(key, control); else dateControls.current.delete(key); },
+      tabIndex: selectedDate === key ? 0 : -1,
+      "aria-pressed": selectedDate === key,
+      onClick: () => setSelectedDate(key),
+      onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => dateKeyDown(event, date),
+    };
+  }
+  const move = (amount: number, unit: "week" | "month" | "year") => {
+    setNavigation(current => moveDate(current, amount, unit));
+    setCompactStart(current => moveDate(navigationDate(view === "three-months" ? current : navigation.date), amount, unit).date);
+  };
+  function goToday() {
+    const now = new Date();
+    setToday(now);
+    setNavigation(navigationDate(now));
+    setCompactStart(now);
+  }
+  useEffect(() => watchToday(setToday, {
+    now: () => new Date(),
+    schedule: (callback, delay) => window.setTimeout(callback, delay),
+    cancel: timer => window.clearTimeout(timer as number | undefined),
+    listen: callback => {
+      const visible = () => { if (document.visibilityState === "visible") callback(); };
+      window.addEventListener("focus", callback);
+      document.addEventListener("visibilitychange", visible);
+      return () => {
+        window.removeEventListener("focus", callback);
+        document.removeEventListener("visibilitychange", visible);
+      };
+    },
+  }), []);
   const titleInput = useRef<HTMLInputElement>(null);
   const endDateInput = useRef<HTMLInputElement>(null);
   const editTrigger = useRef<HTMLElement | null>(null);
@@ -108,8 +179,7 @@ export function App() {
       {eventNotes(event)}
     </li>;
   }
-  const today = new Date();
-  const days = weekDays(today, weekOffset);
+  const days = weekDays(navigation.date);
   const formatDate = (date: Date) =>
     date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const upcoming = upcomingEvents(events, dateKey(today));
@@ -118,17 +188,18 @@ export function App() {
   const visibleDays = view === "week" ? days : view === "month" ? monthDays(month) : threeMonths.flatMap(date => monthDays(date));
   const visibleEvents = expandEvents(events, dateKey(visibleDays[0]), dateKey(visibleDays[visibleDays.length - 1]));
   const selectedEvents = expandEvents(events, selectedDate, selectedDate);
-  function moveThreeMonths(offset: number) {
-    const next = new Date(month.getFullYear(), month.getMonth() + offset, 1, 12);
-    setMonth(next);
-    setSelectedDate(dateKey(next));
-  }
 
   return (
     <main>
       <h1>Family Calendar</h1>
       <AppearanceSelector />
       <p>A private calendar for our family.</p>
+      <nav className="view-selector" aria-label="Calendar view">
+        <button type="button" aria-pressed={view === "week"} onClick={() => setView("week")}>Week</button>
+        <button type="button" aria-pressed={view === "month"} onClick={() => setView("month")}>Month</button>
+        <button type="button" aria-pressed={view === "three-months"} onClick={() => { reconcileCompactRange(navigation.date); setView("three-months"); }}>3 Months</button>
+      </nav>
+      <p className="visually-hidden" role="status" aria-atomic="true">{view === "week" ? `Week of ${formatDate(days[0])}` : view === "month" ? monthTitle(month) : `${monthTitle(threeMonths[0])} through ${monthTitle(threeMonths[2])}`}. Selected date {formatDate(navigation.date)}.</p>
       <button type="button" onClick={() => {
         try {
           downloadBackup();
@@ -141,40 +212,28 @@ export function App() {
       }}>Export backup</button>
       <p role="status">{backupNotice}</p>
       {backupError && <p role="alert">{backupError}</p>}
-      <nav className="view-selector" aria-label="Calendar view">
-        <button type="button" aria-pressed={view === "week"} onClick={() => setView("week")}>Week</button>
-        <button type="button" aria-pressed={view === "month"} onClick={() => setView("month")}>Month</button>
-        <button type="button" aria-pressed={view === "three-months"} onClick={() => {
-          setView("three-months");
-          // Keep a chosen date when returning to the same visible range.
-          const rangeEnd = new Date(month.getFullYear(), month.getMonth() + 3, 1, 12);
-          if (selectedDate < dateKey(month) || selectedDate >= dateKey(rangeEnd)) {
-            setSelectedDate(dateKey(month));
-          }
-        }}>3 Months</button>
-      </nav>
       {view === "week" ?
       <section className="weekly-calendar" aria-labelledby="weekly-calendar-heading">
         <header className="week-header">
-          <h2 id="weekly-calendar-heading">{weekOffset === 0 ? "This week" : "Week"}</h2>
+          <h2 id="weekly-calendar-heading">{dateKey(days[0]) === dateKey(weekDays(today)[0]) ? "This week" : "Week"}</h2>
           <p>{formatDate(days[0])} – {formatDate(days[6])}</p>
         </header>
         <nav className="week-navigation" aria-label="Week navigation">
-          <button type="button" onClick={() => setWeekOffset(offset => offset - 1)}>Previous week</button>
-          <button type="button" onClick={() => setWeekOffset(0)}>This week</button>
-          <button type="button" onClick={() => setWeekOffset(offset => offset + 1)}>Next week</button>
+          <button type="button" onClick={() => move(-1, "week")}>Previous week</button>
+          <button type="button" onClick={goToday}><span className="visually-hidden">Today: </span>This week</button>
+          <button type="button" onClick={() => move(1, "week")}>Next week</button>
         </nav>
-        <p className="visually-hidden" role="status">Week of {formatDate(days[0])}</p>
+
         <ol className="week-days">
           {days.map((date) => {
             const isToday = date.toDateString() === today.toDateString();
             return (
               <li key={dateKey(date)} className={`day${isToday ? " day-today" : ""}`}>
                 <h3>
-                  <time dateTime={dateKey(date)} aria-current={isToday ? "date" : undefined}>
+                  <button type="button" className="calendar-date" {...dateProps(date)} aria-label={formatDate(date)}><time dateTime={dateKey(date)} aria-current={isToday ? "date" : undefined}>
                     <span className="day-name">{date.toLocaleDateString("en-US", { weekday: "long" })}</span>
                     <span className="day-date">{date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                  </time>
+                  </time></button>
                   {isToday && <span className="today-label">Today</span>}
                 </h3>
                 {visibleEvents.some(event => event.date === dateKey(date)) ?
@@ -194,14 +253,14 @@ export function App() {
         </ol>
       </section> : view === "month" ?
       <section className="monthly-calendar" aria-labelledby="monthly-calendar-heading">
-        <h2 id="monthly-calendar-heading" aria-live="polite">{month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2>
+        <h2 id="monthly-calendar-heading">{month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2>
         <nav className="week-navigation" aria-label="Month navigation">
-          <button type="button" onClick={() => setMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1, 12))}>Previous month</button>
-          <button type="button" onClick={() => setMonth(new Date(today.getFullYear(), today.getMonth(), 1, 12))}>Today</button>
-          <button type="button" onClick={() => setMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1, 12))}>Next month</button>
+          <button type="button" onClick={() => move(-1, "month")}>Previous month</button>
+          <button type="button" onClick={goToday}>Today</button>
+          <button type="button" onClick={() => move(1, "month")}>Next month</button>
         </nav>
         <p className="month-help">Select an event to edit it. On smaller screens, dates are listed in order.</p>
-        <div className="month-scroll" role="region" aria-label="Monthly calendar dates" tabIndex={0}>
+        <div className="month-scroll" role="region" aria-label="Monthly calendar dates">
           <div className="month-weekdays" aria-hidden="true">
             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(day => <span key={day}>{day}</span>)}
           </div>
@@ -211,9 +270,9 @@ export function App() {
               const isToday = key === dateKey(today);
               const dayEvents = visibleEvents.filter(event => event.date === key);
               return <li key={key} className={`month-day${date.getMonth() !== month.getMonth() ? " outside-month" : ""}${isToday ? " day-today" : ""}`}>
-                <h3><time dateTime={key} aria-current={isToday ? "date" : undefined} aria-label={date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}>
+                <h3><button type="button" className="calendar-date" {...dateProps(date)}><time dateTime={key} aria-current={isToday ? "date" : undefined} aria-label={date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}>
                   {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                </time>{isToday && <span className="today-label">Today</span>}</h3>
+                </time></button>{isToday && <span className="today-label">Today</span>}</h3>
                 <ul className="day-events">{dayEvents.map(event => <li key={`${event.id}:${event.date}`}>
                   <button type="button" className="month-event" onClick={click => editEvent(event, click?.currentTarget)} aria-label={`Edit ${event.title}`}>
                     <time dateTime={event.time ? `${event.date}T${event.time}` : event.date}>{event.time ?? "All day"}</time>
@@ -230,16 +289,13 @@ export function App() {
         </div>
       </section> :
       <section className="three-month-calendar" aria-labelledby="three-month-calendar-heading">
-        <h2 id="three-month-calendar-heading" aria-live="polite">{monthTitle(threeMonths[0])} – {monthTitle(threeMonths[2])}</h2>
+        <h2 id="three-month-calendar-heading">{monthTitle(threeMonths[0])} – {monthTitle(threeMonths[2])}</h2>
         <nav className="week-navigation" aria-label="Three-month navigation">
-          <button type="button" onClick={() => moveThreeMonths(-3)}>Previous 3 months</button>
-          <button type="button" onClick={() => {
-            setMonth(new Date(today.getFullYear(), today.getMonth(), 1, 12));
-            setSelectedDate(dateKey(today));
-          }}>Today</button>
-          <button type="button" onClick={() => moveThreeMonths(3)}>Next 3 months</button>
+          <button type="button" onClick={() => move(-3, "month")}>Previous 3 months</button>
+          <button type="button" onClick={goToday}>Today</button>
+          <button type="button" onClick={() => move(3, "month")}>Next 3 months</button>
         </nav>
-        <p id="compact-help">Select a date to see all its events and edit or delete them. Use arrow keys to move between dates within a month; Home and End move to its first and last dates.</p>
+        <p id="compact-help">Select a date to see all its events and edit or delete them. Use arrow keys to select and move between dates across months; Home and End move to its first and last dates.</p>
         <div className="three-months">
           {threeMonths.map(calendarMonth => <section className="compact-month" key={dateKey(calendarMonth)} aria-labelledby={`compact-${dateKey(calendarMonth)}`}>
             <h3 id={`compact-${dateKey(calendarMonth)}`}>{monthTitle(calendarMonth)}</h3>
@@ -253,15 +309,7 @@ export function App() {
                 const dayEvents = inMonth ? visibleEvents.filter(event => event.date === key) : [];
                 const fullDate = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
                 return <li key={key} className={inMonth ? "compact-day" : "compact-day outside-month"}>
-                  {inMonth ? <button type="button" className="compact-date" aria-label={`${fullDate}: ${dayEvents.length} ${dayEvents.length === 1 ? "event" : "events"}`} aria-pressed={selectedDate === key} aria-controls="selected-day-events" onClick={() => setSelectedDate(key)} onKeyDown={event => {
-                    const steps: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
-                    if (!(event.key in steps) && event.key !== "Home" && event.key !== "End") return;
-                    const controls = Array.from(event.currentTarget.closest("ol")!.querySelectorAll<HTMLButtonElement>("button"));
-                    const index = controls.indexOf(event.currentTarget);
-                    const next = event.key === "Home" ? 0 : event.key === "End" ? controls.length - 1 : Math.max(0, Math.min(controls.length - 1, index + steps[event.key]));
-                    event.preventDefault();
-                    controls[next]?.focus();
-                  }}>
+                  {inMonth ? <button type="button" className="compact-date" aria-label={`${fullDate}: ${dayEvents.length} ${dayEvents.length === 1 ? "event" : "events"}`} {...dateProps(date)} aria-controls="selected-day-events">
                     <time dateTime={key} aria-current={key === dateKey(today) ? "date" : undefined}>{date.getDate()}</time>
                     {dayEvents.length > 0 && <>
                       <span className="event-dots" aria-hidden="true">{dayEvents.slice(0, 3).map(event => <span key={event.id} className="event-dot" style={{ backgroundColor: labels.find(label => label.id === event.labelId)?.color ?? "#536259" }} />)}</span>
@@ -274,7 +322,7 @@ export function App() {
           </section>)}
         </div>
         <section id="selected-day-events" className="selected-day-events" aria-labelledby="selected-day-heading">
-          <h3 id="selected-day-heading" aria-live="polite">Events for {selectedDate}</h3>
+          <h3 id="selected-day-heading">Events for {selectedDate}</h3>
           {selectedEvents.length ? <ul>{selectedEvents.map(renderEvent)}</ul> : <p>No events scheduled</p>}
         </section>
       </section>}
