@@ -25,7 +25,23 @@ export function App() {
   const [endDateError, setEndDateError] = useState("");
   const [today, setToday] = useState(() => new Date());
   const [navigation, setNavigation] = useState(() => navigationDate(new Date()));
-  const [view, setView] = useState<"week" | "month" | "three-months">("week");
+  const [view, updateView] = useState<"week" | "month" | "three-months">(() => {
+    try {
+      const saved = window.localStorage.getItem("family-calendar-view");
+      if (saved === "month" || saved === "three-months") return saved;
+    } catch { /* Keep navigation available when storage is blocked. */ }
+    return "week";
+  });
+  const [viewError, setViewError] = useState("");
+  function setView(next: "week" | "month" | "three-months") {
+    updateView(next);
+    try {
+      window.localStorage.setItem("family-calendar-view", next);
+      setViewError("");
+    } catch {
+      setViewError("Calendar view changed, but could not be saved. It may reset on reload.");
+    }
+  }
   const [compactStart, setCompactStart] = useState(() => navigationDate(new Date()).date);
   const period = view === "three-months" ? compactStart : navigation.date;
   const month = new Date(period.getFullYear(), period.getMonth(), 1, 12);
@@ -200,6 +216,7 @@ export function App() {
         <button type="button" aria-pressed={view === "month"} onClick={() => setView("month")}>Month</button>
         <button type="button" aria-pressed={view === "three-months"} onClick={() => { reconcileCompactRange(navigation.date); setView("three-months"); }}>3 Months</button>
       </nav>
+      {viewError && <p role="alert">{viewError}</p>}
       <p className="visually-hidden" role="status" aria-atomic="true">{view === "week" ? `Week of ${formatDate(days[0])}` : view === "month" ? monthTitle(month) : `${monthTitle(threeMonths[0])} through ${monthTitle(threeMonths[2])}`}. Selected date {formatDate(navigation.date)}.</p>
       <button type="button" onClick={() => {
         try {

@@ -204,6 +204,41 @@ test("monthly dates cover aligned Monday-first weeks, leap years, and year bound
   assert.equal(events.dateKey(calendar.monthDays(new Date(2026, 11, 31), 1)[0]), "2026-12-28");
 });
 
+test("calendar views persist across remounts, reject invalid settings and tolerate storage failure", () => {
+  const f = fixture();
+  const mount = storage => f.app({ localStorage: storage });
+  for (const label of ["Month", "3 Months", "Week"]) {
+    let app = mount(f.storage);
+    button(app.render(), label).props.onClick();
+    app = mount(f.storage);
+    assert.equal(button(app.render(), label).props["aria-pressed"], true);
+  }
+  f.storage.setItem("family-calendar-view", "invalid");
+  assert.equal(button(mount(f.storage).render(), "Week").props["aria-pressed"], true);
+  assert.equal(f.storage.getItem("family-calendar-view"), "invalid");
+  const denied = mount({ getItem() { throw Error("denied"); }, setItem() { throw Error("quota"); } });
+  assert.equal(button(denied.render(), "Week").props["aria-pressed"], true);
+  button(denied.render(), "Month").props.onClick();
+  assert.equal(button(denied.render(), "Month").props["aria-pressed"], true);
+  assert.ok(nodes(denied.render(), n => n.props.role === "alert" && text(n).includes("view changed")).length);
+  assert.equal(f.storage.getItem(events.EVENTS_STORAGE_KEY), "[]");
+});
+
+test("calendar Today action is unique alongside independently named dinner navigation", () => {
+  const app = fixture().app();
+  const dinner = harness("./DinnerRoster.tsx", { "./events": events, "./calendar": calendar, "./dinners": dinners });
+  for (const view of ["Week", "Month", "3 Months"]) {
+    button(app.render(), view).props.onClick();
+    const controls = nodes([app.render(), dinner.render()], n => n.type === "button" && /today/i.test(n.props["aria-label"] ?? text(n)));
+    assert.equal(controls.length, 1, view);
+    const current = button(dinner.render(), "Current dinner week");
+    assert.equal(current.props.type, "button");
+    button(dinner.render(), "Next dinner week").props.onClick();
+    current.props.onClick();
+    assert.match(text(dinner.render()), new RegExp(events.dateKey(calendar.weekDays(new Date())[0])));
+  }
+});
+
 function fixture(initial = []) {
   const values = new Map([[events.EVENTS_STORAGE_KEY, JSON.stringify(initial)]]);
   let failWrites = false;
@@ -217,7 +252,7 @@ function fixture(initial = []) {
   const prompts = [];
   let confirm = false;
   const dependencies = { "./backup": { downloadBackup() {} }, "./events": { ...events, eventStore }, "./labels": { ...labels, labelStore }, "./calendar": calendar, "./LabelManager": { LabelManager() {} }, "./AppearanceSelector": { AppearanceSelector() {} } };
-  const app = () => harness("./App.tsx", dependencies, { confirm(message) { prompts.push(message); return confirm; } });
+  const app = (browser = {}) => harness("./App.tsx", dependencies, { confirm(message) { prompts.push(message); return confirm; }, ...browser });
   return { storage, eventStore, labelStore, prompts, app, dependencies,
     confirm: value => { confirm = value; }, fail: () => { failWrites = true; }, writes: () => writes };
 }
@@ -1118,7 +1153,7 @@ test("dinner form integration persists ingredients, navigates, reloads and remov
  button(app.render(), "Next dinner week").props.onClick(); assert.equal((text(app.render()).match(/No dinner planned/g) ?? []).length, 7);
  button(app.render(), "Previous dinner week").props.onClick(); assert.ok(button(app.render(), `Edit dinner for ${date}`));
  const reload = mount(); reload.render(); assert.ok(text(reload.render()).includes("Cook: Alex"));
- button(app.render(), "Next dinner week").props.onClick(); button(app.render(), "Today").props.onClick(); assert.ok(button(app.render(), `Edit dinner for ${date}`));
+ button(app.render(), "Next dinner week").props.onClick(); button(app.render(), "Current dinner week").props.onClick(); assert.ok(button(app.render(), `Edit dinner for ${date}`));
  button(app.render(), `Edit dinner for ${date}`).props.onClick({ currentTarget: { focus() {} } }); button(app.render(), "Remove dinner").props.onClick(); assert.deepEqual(store.list(), {});
  app.unmount(); reload.unmount();
 });

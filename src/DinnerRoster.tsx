@@ -42,7 +42,7 @@ export function DinnerRoster() {
     <p aria-live="polite">{dateKey(days[0])} – {dateKey(days[6])}</p>
     <nav className="week-navigation" aria-label="Dinner week navigation">
       <button type="button" disabled={!!editing} onClick={() => move(-1)}>Previous dinner week</button>
-      <button type="button" disabled={!!editing} onClick={() => { setAnchor(new Date()); setNotice(""); }}>Today</button>
+      <button type="button" disabled={!!editing} onClick={() => { setAnchor(new Date()); setNotice(""); }}>Current dinner week</button>
       <button type="button" disabled={!!editing} onClick={() => move(1)}>Next dinner week</button>
     </nav>
     {error && <p role="alert">{error}</p>}

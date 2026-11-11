@@ -44,6 +44,19 @@ using Node's built-in runner without additional dependencies.
 
 ## Dinner groceries
 
+Calendar view choices (Week, Month and 3 Months) persist in
+`family-calendar-view`. Invalid or unreadable preferences fall back to Week;
+failed writes leave the chosen view usable and show an alert. Dinner navigation
+uses **Current dinner week** to distinguish it from the calendar's Today action.
+Follow-up component regressions verify all three view choices after remount,
+invalid/denied storage, write-failure feedback and one Today-named button across
+the calendar and dinner component output. These are not browser accessibility
+tree or real page-reload assertions. Studio must rerun calendar-journey checks
+28 (navigation/year boundaries) and 37 (appearance/view reload persistence)
+after checkpointing. The recorded runner.cjs authorized-pin mismatch requires
+Studio to reconcile its protected runner evidence; application changes cannot
+resolve that verification preparation failure.
+
 The Grocery checklist follows the selected **dinner week**. Ingredient names are
 trimmed and compared case-insensitively; the first spelling in date/entry order
 is displayed. Each original amount is shown with its dinner date, including
