@@ -403,7 +403,7 @@ export function App() {
           <ul>{events.filter(event => event.date < dateKey(today)).map(renderEvent)}</ul>
         </>}
       </section>
-      <DinnerRoster />
+      <DinnerRoster labels={labels} />
       <LabelManager labels={labels} onChange={() => setLabels(labelStore.list())} />
       <section aria-labelledby="planning-tips-heading">
         <h2 id="planning-tips-heading">Planning tips</h2>

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { dateKey } from "./events";
 import { weekDays } from "./calendar";
+import { DinnerRollCall } from "./DinnerRollCall";
+import type { CalendarLabel } from "./labels";
 import { dinnerStore, groceryStore, groceryItems, parseIngredients, formatIngredients, type DinnerPlans, type GroceryChecks } from "./dinners";
 
-export function DinnerRoster() {
+export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
   const [anchor, setAnchor] = useState(() => new Date());
   const [plans, setPlans] = useState<DinnerPlans>({});
   const [checks, setChecks] = useState<GroceryChecks>({});
@@ -58,6 +60,7 @@ export function DinnerRoster() {
         }}>{dinner ? "Edit dinner" : "Plan dinner"}</button>
       </li>;
     })}</ol>
+    <DinnerRollCall days={days} labels={labels} />
     <section className="grocery-checklist" aria-labelledby="grocery-heading">
       <h3 id="grocery-heading">Grocery checklist</h3>
       <p>For dinner week {week} through {dateKey(days[6])}. Amounts are listed per day, without combining units.</p>

@@ -8,7 +8,86 @@ import * as labels from "./labels.ts";
 import * as calendar from "./calendar.ts";
 import * as theme from "./theme.ts";
 import * as dinners from "./dinners.ts";
+import * as rollCall from "./rollCall.ts";
 import { serializeBackup } from "./backup.ts";
+
+test("roll call defaults, repeated updates, reload, year boundary and unrelated storage protection", () => {
+ const values = new Map([[events.EVENTS_STORAGE_KEY, "[]"], [labels.LABELS_STORAGE_KEY, "[]"], [dinners.DINNERS_STORAGE_KEY, "{}"], [dinners.GROCERIES_STORAGE_KEY, "{}"]]);
+ let fail = false;
+ const storage = { getItem: key => values.get(key) ?? null, setItem(key, value) { if (fail) throw Error("quota"); values.set(key, value); } };
+ const before = new Map(values), store = rollCall.createRollCallStore(() => storage);
+ assert.equal(rollCall.availabilityFor(store.list(), "2026-12-31", "p"), "Unknown");
+ for (const state of ["Available", "Unavailable", "Unknown", "Available"]) {
+  store.save("2026-12-31", "p", state);
+  assert.equal(rollCall.availabilityFor(rollCall.createRollCallStore(() => storage).list(), "2026-12-31", "p"), state);
+ }
+ store.save("2027-01-01", "p", "Unavailable");
+ store.save("2027-01-04", "p", "Available");
+ assert.equal(rollCall.availabilityFor(store.list(), "2027-01-07", "p"), "Unknown");
+ assert.equal(rollCall.availabilityFor(store.list(), "2026-12-31", "p"), "Available");
+ assert.equal(rollCall.availabilityFor(store.list(), "2027-01-01", "p"), "Unavailable");
+ assert.deepEqual(Object.keys(JSON.parse(serializeBackup(storage))).sort(), ["dinners", "events", "format", "groceries", "labels", "version"]);
+ const saved = values.get(rollCall.ROLL_CALL_STORAGE_KEY); fail = true;
+ assert.throws(() => store.save("2026-12-31", "p", "Unknown"));
+ assert.equal(values.get(rollCall.ROLL_CALL_STORAGE_KEY), saved); fail = false;
+ for (const raw of ["broken", "[]", "null", '{"2026-02-30":{}}', '{"2026-12-31":{"p":"yes"}}', '{"version":2}']) {
+  values.set(rollCall.ROLL_CALL_STORAGE_KEY, raw);
+  assert.throws(() => store.list()); assert.throws(() => store.save("2026-12-31", "p", "Available"));
+  assert.equal(values.get(rollCall.ROLL_CALL_STORAGE_KEY), raw);
+ }
+ for (const [key, value] of before) assert.equal(values.get(key), value);
+});
+
+test("roll call component labels controls, counts only available, renames/deletes, reloads and isolates weeks", () => {
+ const values = new Map(); let fail = false;
+ const storage = { getItem: key => values.get(key) ?? null, setItem(key, value) { if (fail) throw Error(); values.set(key, value); } };
+ const store = rollCall.createRollCallStore(() => storage);
+ const mount = () => harness("./DinnerRollCall.tsx", { "./events": events, "./rollCall": { ...rollCall, rollCallStore: store } }, { runMountEffects: true, addEventListener() {}, removeEventListener() {} });
+ let app = mount();
+ let props = { days: calendar.weekDays(new Date(2026, 11, 31, 12)), labels: [{ id: "p", name: "Pat", kind: "Person", color: "#ffffff" }, { id: "c", name: "Work", kind: "Category", color: "#ffffff" }] };
+ const render = () => app.render(props);
+ render();
+ const controls = () => nodes(render(), n => n.type === "select");
+ assert.equal(controls().length, 7); assert.ok(controls().every(n => n.props.value === "Unknown"));
+ assert.equal(controls()[0].props["aria-label"], "Dinner availability for Pat on 2026-12-28");
+ assert.deepEqual(nodes(controls()[0], n => n.type === "option").map(text), ["Unknown", "Available", "Unavailable"]);
+ assert.match(text(render()), /0 of 1 available/);
+ change(controls()[0], "Available"); assert.match(text(render()), /1 of 1 available/);
+ assert.match(text(nodes(render(), n => n.props.role === "status")), /Pat: Available for 2026-12-28/);
+ props = { ...props, labels: [{ ...props.labels[0], name: "Patricia" }] };
+ assert.equal(controls()[0].props.value, "Available"); assert.match(controls()[0].props["aria-label"], /Patricia/);
+ app = mount(); render(); assert.equal(controls()[0].props.value, "Available");
+ props = { ...props, days: calendar.weekDays(new Date(2027, 0, 4, 12)) };
+ assert.ok(controls().every(n => n.props.value === "Unknown"));
+ props = { ...props, days: calendar.weekDays(new Date(2026, 11, 31, 12)) };
+ change(controls()[0], "Unavailable"); assert.match(text(render()), /0 of 1 available/);
+ props = { ...props, labels: [] }; assert.equal(controls().length, 0);
+ assert.equal(nodes(render(), n => n.type === "a")[0].props.href, "#label-name");
+ props = { ...props, labels: [{ id: "new", name: "Patricia", kind: "Person" }] };
+ assert.equal(controls()[0].props.value, "Unknown");
+ fail = true; change(controls()[0], "Available");
+ assert.ok(controls().every(n => n.props.disabled)); assert.match(text(render()), /could not be saved/);
+ assert.equal(controls()[0].props.value, "Unknown");
+ values.set(rollCall.ROLL_CALL_STORAGE_KEY, "broken"); app = mount(); render();
+ assert.match(text(render()), /could not be read/); assert.ok(controls().every(n => n.props.disabled));
+});
+
+test("dinner roster passes the same Monday-Sunday dates and Person identities to roll call after navigation", () => {
+ const storage = { getItem: () => null, setItem() {} };
+ const app = harness("./DinnerRoster.tsx", { "./events": events, "./calendar": calendar, "./dinners": { ...dinners, dinnerStore: dinners.createDinnerStore(() => storage), groceryStore: dinners.createGroceryStore(() => storage) } });
+ const people = [{ id: "p", name: "Pat", kind: "Person", color: "#ffffff" }];
+ const render = () => app.render({ labels: people });
+ const roll = () => nodes(render(), n => typeof n.type === "function" && n.type.name === "DinnerRollCall")[0];
+ const initial = roll().props.days.map(events.dateKey);
+ assert.equal(roll().props.labels, people);
+ assert.equal(roll().props.days[0].getDay(), 1); assert.equal(roll().props.days[6].getDay(), 0);
+ button(render(), "Next dinner week").props.onClick();
+ assert.notDeepEqual(roll().props.days.map(events.dateKey), initial);
+ const dinnerDates = nodes(section(render(), "dinner-heading"), n => n.type === "time").map(n => n.props.dateTime);
+ assert.deepEqual(roll().props.days.map(events.dateKey), dinnerDates);
+ button(render(), "Previous dinner week").props.onClick();
+ assert.deepEqual(roll().props.days.map(events.dateKey), initial);
+});
 
 test("groceries deduplicate trimmed case variants and retain each day's incompatible amounts", () => {
  const plans = { "2026-12-28": { name: "A", ingredients: [{ name: " Rice ", amount: "1 cup" }, { name: "RICE", amount: "200 g" }, { name: "Salt" }] }, "2026-12-29": { name: "B", ingredients: [{ name: "rice", amount: "1 bag" }] } };
@@ -130,6 +209,7 @@ function harness(file, dependencies, window = {}) {
   new Function("require", "exports", "window", output)(name => {
     if (name === "react") return hooks;
     if (name === "./DinnerRoster") return { DinnerRoster() {} };
+    if (name === "./DinnerRollCall") return { DinnerRollCall() {} };
     if (name in dependencies) return dependencies[name];
     if (name === "react/jsx-runtime") return require(name);
     throw new Error(`Unexpected dependency ${name}`);

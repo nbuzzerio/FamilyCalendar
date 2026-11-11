@@ -34,7 +34,7 @@ export function LabelManager({ labels, onChange }: { labels: CalendarLabel[]; on
         if (editing) labelStore.update(editing, input); else labelStore.create(input);
       }, editing ? "Label updated." : "Label added.")) reset();
     }}>
-      <label>Label name <input ref={nameInput} required value={name} onChange={event => setName(event.target.value)} /></label>
+      <label>Label name <input id="label-name" ref={nameInput} required value={name} onChange={event => setName(event.target.value)} /></label>
       <label>Label type <select value={kind} onChange={event => setKind(event.target.value as LabelInput["kind"])}>
         <option>Person</option><option>Category</option>
       </select></label>
