@@ -7,6 +7,8 @@ import * as events from "./events.ts";
 import * as labels from "./labels.ts";
 import * as calendar from "./calendar.ts";
 import * as theme from "./theme.ts";
+import * as dinners from "./dinners.ts";
+import { serializeBackup } from "./backup.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -46,6 +48,7 @@ function harness(file, dependencies, window = {}) {
   const exports = {};
   new Function("require", "exports", "window", output)(name => {
     if (name === "react") return hooks;
+    if (name === "./DinnerRoster") return { DinnerRoster() {} };
     if (name in dependencies) return dependencies[name];
     if (name === "react/jsx-runtime") return require(name);
     throw new Error(`Unexpected dependency ${name}`);
@@ -993,4 +996,73 @@ test("later compact selection keeps range, heading and selected control consiste
       if (later) later.props.onClick();
     }
   } finally { t.mock.timers.reset(); }
+});
+
+test("dinner storage preserves weeks, reloads, unrelated data and malformed bytes", () => {
+ const values = new Map([[events.EVENTS_STORAGE_KEY, "original"]]);
+ const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+ const store = dinners.createDinnerStore(() => storage);
+ assert.deepEqual(store.list(), {});
+ const meal = { name: "Soup", cook: "Sam", notes: "Warm", ingredients: [{ name: "Carrots", amount: "2" }, { name: "Water" }] };
+ store.save("2026-12-28", meal); store.save("2027-01-04", { name: "Pasta", ingredients: [] });
+ assert.deepEqual(dinners.createDinnerStore(() => storage).list()["2026-12-28"], meal);
+ store.save("2026-12-28", null); assert.equal(store.list()["2027-01-04"].name, "Pasta");
+ for (const raw of ["{bad", "[]", "null", '{"2026-02-30":{"name":"X","ingredients":[]}}', '{"2026-01-01":{"name":"X","ingredients":[{}]}}']) {
+  values.set(dinners.DINNERS_STORAGE_KEY, raw); assert.throws(() => store.list()); assert.throws(() => store.save("2026-01-01", meal)); assert.equal(values.get(dinners.DINNERS_STORAGE_KEY), raw);
+ }
+ assert.equal(values.get(events.EVENTS_STORAGE_KEY), "original");
+ assert.throws(() => dinners.createDinnerStore(() => ({ getItem() { throw Error("denied"); }, setItem() {} })).list());
+ assert.throws(() => dinners.createDinnerStore(() => ({ getItem() { return null; }, setItem() { throw Error("quota"); } })).save("2026-01-01", meal));
+});
+
+test("dinner weeks cross year, leap day and DST with local Monday-Sunday dates", () => {
+ for (const [date, first, last] of [["2027-01-03", "2026-12-28", "2027-01-03"], ["2024-02-29", "2024-02-26", "2024-03-03"], ["2026-03-08", "2026-03-02", "2026-03-08"], ["2026-11-01", "2026-10-26", "2026-11-01"]]) {
+  const days = calendar.weekDays(events.localDate(date)); assert.equal(days.length, 7); assert.equal(events.dateKey(days[0]), first); assert.equal(events.dateKey(days[6]), last);
+  assert.equal(events.dateKey(calendar.weekDays(calendar.weekDays(days[0], 1)[0], -1)[0]), first);
+ }
+});
+
+test("dinner form integration persists ingredients, navigates, reloads and removes", () => {
+ const values = new Map();
+ const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+ const store = dinners.createDinnerStore(() => storage);
+ const mount = () => harness("./DinnerRoster.tsx", { "./events": events, "./calendar": calendar, "./dinners": { dinnerStore: store } }, { runMountEffects: true, addEventListener() {}, removeEventListener() {}, confirm: () => true });
+ const app = mount(); app.render(); let tree = app.render();
+ assert.equal(nodes(tree, n => n.type === "time").length, 7);
+ assert.equal((text(tree).match(/No dinner planned/g) ?? []).length, 7);
+ const date = events.dateKey(calendar.weekDays(new Date())[0]);
+ button(tree, `Plan dinner for ${date}`).props.onClick({ currentTarget: { focus() {} } }); tree = app.render();
+ change(field(tree, "Dinner name"), "Rice"); change(field(tree, "Cook /"), "Alex"); button(tree, "Add ingredient").props.onClick(); tree = app.render();
+ const ingredientInputs = nodes(tree, n => n.type === "fieldset").flatMap(n => nodes(n, child => child.type === "input"));
+ change(ingredientInputs[0], "Rice"); change(ingredientInputs[1], "1 cup"); submit(app.render());
+ assert.equal(store.list()[date].ingredients[0].amount, "1 cup");
+ button(app.render(), "Next dinner week").props.onClick(); assert.equal((text(app.render()).match(/No dinner planned/g) ?? []).length, 7);
+ button(app.render(), "Previous dinner week").props.onClick(); assert.ok(button(app.render(), `Edit dinner for ${date}`));
+ const reload = mount(); reload.render(); assert.ok(text(reload.render()).includes("Cook: Alex"));
+ button(app.render(), "Next dinner week").props.onClick(); button(app.render(), "Today").props.onClick(); assert.ok(button(app.render(), `Edit dinner for ${date}`));
+ button(app.render(), `Edit dinner for ${date}`).props.onClick({ currentTarget: { focus() {} } }); button(app.render(), "Remove dinner").props.onClick(); assert.deepEqual(store.list(), {});
+ app.unmount(); reload.unmount();
+});
+
+test("dinner backup includes exact dated plans and refuses corruption without writes", () => {
+ const plans = { "2026-11-10": { name: "? soup", notes: "Line one\nLine two", ingredients: [{ name: "?", amount: "2 cups" }] } };
+ const storage = { getItem: key => key === dinners.DINNERS_STORAGE_KEY ? JSON.stringify(plans) : null };
+ assert.deepEqual(JSON.parse(serializeBackup(storage)).dinners, plans);
+ assert.throws(() => serializeBackup({ getItem: key => key === dinners.DINNERS_STORAGE_KEY ? "broken" : null }));
+});
+
+test("dinner accessibility structure labels native fields and reports storage failure", () => {
+ const app = harness("./DinnerRoster.tsx", { "./events": events, "./calendar": calendar, "./dinners": { dinnerStore: { list() { throw Error("Storage unavailable"); }, save() { throw Error("quota"); } } } }, { runMountEffects: true, addEventListener() {}, removeEventListener() {} });
+ app.render(); let tree = app.render();
+ assert.equal(nodes(tree, n => n.props.role === "alert").length, 1);
+ assert.equal(nodes(tree, n => n.type === "nav" && n.props["aria-label"] === "Dinner week navigation").length, 1);
+ const action = nodes(tree, n => n.type === "button" && n.props["aria-label"]?.startsWith("Plan dinner"))[0];
+ action.props.onClick({ currentTarget: { focus() {} } }); tree = app.render();
+ assert.ok(field(tree, "Dinner name").props.required);
+ assert.ok(field(tree, "Cook /")); assert.ok(field(tree, "Dinner notes"));
+ assert.ok(nodes(tree, n => n.type === "form" && n.props["aria-label"].startsWith("Dinner for ")).length);
+ change(field(tree, "Dinner name"), "Soup"); submit(app.render());
+ tree = app.render(); assert.ok(text(tree).includes("Dinner could not be saved")); assert.equal(field(tree, "Dinner name").props.value, "Soup");
+ button(tree, "Cancel dinner").props.onClick(); assert.equal(nodes(app.render(), n => n.type === "form").length, 0);
+ app.unmount();
 });

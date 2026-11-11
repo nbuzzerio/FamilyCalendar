@@ -2,9 +2,12 @@
 import { EVENTS_STORAGE_KEY, isEvent } from "./events.ts";
 // @ts-expect-error Explicit extensions support the existing Node strip-types test runner.
 import { LABELS_STORAGE_KEY, isLabel } from "./labels.ts";
+// @ts-expect-error Explicit extensions support the existing Node strip-types test runner.
+import { DINNERS_STORAGE_KEY, parseDinnerPlans } from "./dinners.ts";
 
 /** Read the saved arrays directly: never normalize, filter, expand series or write. */
 export function serializeBackup(storage: Pick<Storage, "getItem">): string {
+  const dinners = storage.getItem(DINNERS_STORAGE_KEY);
   function read(key: string, valid: (value: unknown) => boolean): unknown[] {
     const raw = storage.getItem(key);
     const value: unknown = raw === null ? [] : JSON.parse(raw);
@@ -18,6 +21,7 @@ export function serializeBackup(storage: Pick<Storage, "getItem">): string {
     version: 1,
     events: read(EVENTS_STORAGE_KEY, isEvent),
     labels: read(LABELS_STORAGE_KEY, isLabel),
+    ...(dinners === null ? {} : { dinners: parseDinnerPlans(dinners) }),
   }, null, 2);
 }
 

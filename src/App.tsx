@@ -5,6 +5,7 @@ import { labelStore, labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
 import { AppearanceSelector } from "./AppearanceSelector";
 import { downloadBackup } from "./backup";
+import { DinnerRoster } from "./DinnerRoster";
 
 export function App() {
   const [events, setEvents] = useState(() => eventStore.list());
@@ -204,7 +205,7 @@ export function App() {
         try {
           downloadBackup();
           setBackupError("");
-          setBackupNotice("Backup download requested. Keep this file private; it contains your saved events, notes and labels.");
+          setBackupNotice("Backup download requested. Keep this file private; it contains your saved events, notes, labels and any dinner plans.");
         } catch {
           setBackupNotice("");
           setBackupError("Backup could not be exported. Saved data was not changed. Check that browser storage is accessible and contains valid calendar data.");
@@ -385,6 +386,7 @@ export function App() {
           <ul>{events.filter(event => event.date < dateKey(today)).map(renderEvent)}</ul>
         </>}
       </section>
+      <DinnerRoster />
       <LabelManager labels={labels} onChange={() => setLabels(labelStore.list())} />
       <section aria-labelledby="planning-tips-heading">
         <h2 id="planning-tips-heading">Planning tips</h2>
