@@ -10,6 +10,87 @@ import * as theme from "./theme.ts";
 import * as dinners from "./dinners.ts";
 import { serializeBackup } from "./backup.ts";
 
+test("groceries deduplicate trimmed case variants and retain each day's incompatible amounts", () => {
+ const plans = { "2026-12-28": { name: "A", ingredients: [{ name: " Rice ", amount: "1 cup" }, { name: "RICE", amount: "200 g" }, { name: "Salt" }] }, "2026-12-29": { name: "B", ingredients: [{ name: "rice", amount: "1 bag" }] } };
+ assert.deepEqual(dinners.groceryItems(plans, Object.keys(plans)), [
+  { key: "rice", name: "Rice", entries: [{ date: "2026-12-28", amount: "1 cup" }, { date: "2026-12-28", amount: "200 g" }, { date: "2026-12-29", amount: "1 bag" }] },
+  { key: "salt", name: "Salt", entries: [{ date: "2026-12-28", amount: "Amount not specified" }] }
+ ]);
+ assert.deepEqual(dinners.groceryItems(plans, ["2027-01-04"]), []);
+});
+
+test("grocery persistence isolates weeks, unchecks, reconciles shared ingredients and preserves dinners on failure", () => {
+ const values = new Map(); let fail = false;
+ const storage = { getItem: key => values.get(key) ?? null, setItem(key, value) { if (fail) throw Error("quota"); values.set(key, value); } };
+ const store = dinners.createGroceryStore(() => storage), meals = dinners.createDinnerStore(() => storage);
+ const meal = { name: "Meal", ingredients: [{ name: "Rice" }] };
+ for (const date of ["2026-12-28", "2026-12-29", "2027-01-04"]) meals.save(date, meal);
+ store.setChecked(meals.list(), "2026-12-28", "rice", true);
+ assert.deepEqual(dinners.createGroceryStore(() => storage).reconcile(meals.list()), { "2026-12-28": ["rice"] });
+ store.setChecked(meals.list(), "2027-01-04", "rice", true);
+ store.setChecked(meals.list(), "2027-01-04", "rice", false);
+ meals.save("2026-12-28", null);
+ assert.deepEqual(store.reconcile(meals.list()), { "2026-12-28": ["rice"] });
+ meals.save("2026-12-29", null);
+ assert.deepEqual(store.reconcile(meals.list()), {});
+ meals.save("2026-12-28", meal);
+ assert.deepEqual(store.reconcile(meals.list()), {}); // Reintroduced ingredient starts unchecked.
+ const before = values.get(dinners.DINNERS_STORAGE_KEY);
+ fail = true;
+ assert.throws(() => store.setChecked(meals.list(), "2026-12-28", "rice", true));
+ assert.equal(values.get(dinners.DINNERS_STORAGE_KEY), before);
+ fail = false;
+ for (const raw of ["broken", "[]", '{"2026-12-28":[3]}', '{"2026-12-29":["rice"]}']) {
+  values.set(dinners.GROCERIES_STORAGE_KEY, raw);
+  assert.throws(() => store.reconcile(meals.list()));
+  assert.equal(values.get(dinners.GROCERIES_STORAGE_KEY), raw);
+  assert.equal(values.get(dinners.DINNERS_STORAGE_KEY), before);
+ }
+ assert.throws(() => dinners.createGroceryStore(() => { throw Error("denied"); }).reconcile({}));
+});
+
+test("grocery component recalculates on dinner edits/removal, labels checkboxes, reloads and isolates navigation", () => {
+ const values = new Map(); let failGrocery = false;
+ const storage = { getItem: key => values.get(key) ?? null, setItem(key, value) { if (failGrocery && key === dinners.GROCERIES_STORAGE_KEY) throw Error("quota"); values.set(key, value); } };
+ const dinnerStore = dinners.createDinnerStore(() => storage), groceryStore = dinners.createGroceryStore(() => storage);
+ const dates = calendar.weekDays(new Date()).map(events.dateKey), week = dates[0];
+ const next = events.dateKey(calendar.weekDays(new Date(), 1)[0]);
+ for (const date of [dates[0], dates[1], next]) dinnerStore.save(date, { name: "Meal", ingredients: [{ name: "Rice", amount: "1 cup" }] });
+ const mount = () => harness("./DinnerRoster.tsx", { "./events": events, "./calendar": calendar, "./dinners": { ...dinners, dinnerStore, groceryStore } }, { runMountEffects: true, addEventListener() {}, removeEventListener() {}, confirm: () => true });
+ let app = mount(); app.render();
+ const grocery = () => section(app.render(), "grocery-heading");
+ const boxes = () => nodes(grocery(), n => n.type === "input" && n.props.type === "checkbox");
+ assert.equal(boxes().length, 1); assert.equal(boxes()[0].props.checked, false);
+ assert.match(text(nodes(grocery(), n => n.type === "label")[0]), new RegExp(`Rice for dinner week ${week}`));
+ assert.equal(nodes(grocery(), n => n.type === "time").length, 2);
+ boxes()[0].props.onChange({ target: { checked: true } }); assert.equal(boxes()[0].props.checked, true);
+ app = mount(); app.render(); assert.equal(boxes()[0].props.checked, true);
+ button(app.render(), "Next dinner week").props.onClick(); assert.equal(boxes()[0].props.checked, false);
+ button(app.render(), "Previous dinner week").props.onClick(); assert.equal(boxes()[0].props.checked, true);
+ const edit = date => button(app.render(), `Edit dinner for ${date}`).props.onClick({ currentTarget: { focus() {} } });
+ edit(dates[0]); change(field(app.render(), "Ingredients"), "Beans | 2 cans"); submit(app.render());
+ assert.equal(boxes().length, 2); assert.match(text(grocery()), /2 cans/);
+ assert.equal(boxes().find(box => box.props.checked)?.props.checked, true); // Other dinner still needs checked Rice.
+ edit(dates[1]); button(app.render(), "Remove dinner").props.onClick();
+ assert.equal(boxes().length, 1); assert.doesNotMatch(text(grocery()), /Rice/);
+ assert.deepEqual(groceryStore.reconcile(dinnerStore.list()), {});
+ failGrocery = true; boxes()[0].props.onChange({ target: { checked: true } });
+ assert.equal(boxes()[0].props.checked, false); assert.equal(boxes()[0].props.disabled, true);
+ assert.match(text(grocery()), /checkmark could not be saved/);
+ edit(dates[0]); change(field(app.render(), "Ingredients"), ""); submit(app.render());
+ assert.deepEqual(dinnerStore.list()[dates[0]].ingredients, []);
+ assert.equal(boxes().length, 0); assert.match(text(grocery()), /No groceries for this week/);
+ failGrocery = false;
+ values.set(dinners.GROCERIES_STORAGE_KEY, "broken");
+ app = mount(); app.render();
+ assert.match(text(grocery()), /checkmarks could not be loaded/);
+ assert.equal(values.get(dinners.GROCERIES_STORAGE_KEY), "broken");
+ edit(dates[0]); change(field(app.render(), "Ingredients"), "Bread"); submit(app.render());
+ assert.equal(dinnerStore.list()[dates[0]].ingredients[0].name, "Bread");
+ assert.equal(boxes()[0].props.disabled, true);
+ assert.match(text(grocery()), /Bread/);
+});
+
 const require = createRequire(import.meta.url);
 
 // Exercise the actual component handlers and rendered props without a DOM dependency.

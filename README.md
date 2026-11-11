@@ -36,6 +36,44 @@ conversion. Invalid stored JSON is treated as empty; invalid or duplicate record
 are skipped. `pnpm test` exercises persistence, CRUD, validation and storage errors
 using Node's built-in runner without additional dependencies.
 
+## Dinner groceries
+
+The Grocery checklist follows the selected **dinner week**. Ingredient names are
+trimmed and compared case-insensitively; the first spelling in date/entry order
+is displayed. Each original amount is shown with its dinner date, including
+multiple entries on the same day. Amounts are never added or converted; missing
+amounts say “Amount not specified”. Dinner changes update the checklist on save.
+
+Native labeled checkboxes persist separately under `family-calendar.groceries.v1`,
+as Monday date keys mapped to normalized ingredient names. Checkmarks survive
+navigation/reload and remain while any dinner in that week needs the ingredient.
+Successful reconciliation removes absent ingredients, so reintroducing them starts
+unchecked. Checkmarks are not included in the dinner/calendar backup. Malformed or
+unavailable checkmark storage displays an alert and disables checkoff until a
+successful reload/storage refresh, while dinner editing remains available. Neither
+checkoff nor reconciliation writes dinner data. Failed reconciliation cannot
+persist removal of stale checkmarks until storage becomes available again.
+
+Automated coverage in `src/app.test.mjs` asserts exact deduplicated rows and dated
+amounts, missing amounts, empty weeks, shared-ingredient retention, removal and
+reintroduction, independent week state, checked/unchecked persistence after store
+and component recreation, immediate form-save recalculation, corrupt storage
+preservation, read/write failures, and dinner saves despite checkmark corruption.
+Component assertions check native checkbox props, wrapping labels with ingredient
+and week, disabled failure controls and visible errors. This harness executes the
+component handlers but does not run a browser or accessibility tree.
+
+Browser coverage remains **NOT_RUN** in this session: no browser tool is exposed,
+and the enrolled Studio runner executes after checkpointing. The existing browser
+contract does not name grocery assertions. Required additional browser assertions
+are: actual labeled checkbox accessible names and Space-key toggling; real
+localStorage persistence after page reload; week navigation isolation; edit/remove
+recalculation with a shared ingredient; empty state; storage-denied alerts without
+dinner loss; and narrow-screen wrapping/focus visibility. These are automated
+verification gaps, not a human QA assignment. A separate owner decision is needed
+to enroll grocery-specific browser coverage if the host suite cannot cover them;
+no tooling or dependency changes are included here.
+
 ## Pinned tools
 
 Node 24.18.0; pnpm 11.9.0; React/React DOM 19.2.4; TypeScript 5.9.3;

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { dateKey } from "./events";
 import { weekDays } from "./calendar";
-import { dinnerStore, parseIngredients, formatIngredients, type DinnerPlans } from "./dinners";
+import { dinnerStore, groceryStore, groceryItems, parseIngredients, formatIngredients, type DinnerPlans, type GroceryChecks } from "./dinners";
 
 export function DinnerRoster() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [plans, setPlans] = useState<DinnerPlans>({});
+  const [checks, setChecks] = useState<GroceryChecks>({});
+  const [groceryError, setGroceryError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -17,7 +19,11 @@ export function DinnerRoster() {
   const nameInput = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   function refresh() {
-    try { setPlans(dinnerStore.list()); setError(""); }
+    try {
+      const saved = dinnerStore.list(); setPlans(saved); setError("");
+      try { setChecks(groceryStore.reconcile(saved)); setGroceryError(""); }
+      catch { setChecks({}); setGroceryError("Grocery checkmarks could not be loaded or updated. Saved dinners are unchanged. Check browser storage and reload to retry."); }
+    }
     catch (error) { setError((error as Error).message); }
   }
   useEffect(() => { refresh(); window.addEventListener("storage", refresh); return () => window.removeEventListener("storage", refresh); }, []);
@@ -26,6 +32,8 @@ export function DinnerRoster() {
     else trigger.current?.focus();
   }, [editing]);
   const days = weekDays(anchor);
+  const week = dateKey(days[0]);
+  const groceries = groceryItems(plans, days.map(dateKey));
   function close() { setEditing(null); setNameError(false); setError(""); }
   function move(offset: number) { setAnchor(weekDays(anchor, offset)[0]); setNotice(""); }
   return <section className="dinner-roster" aria-labelledby="dinner-heading">
@@ -50,6 +58,22 @@ export function DinnerRoster() {
         }}>{dinner ? "Edit dinner" : "Plan dinner"}</button>
       </li>;
     })}</ol>
+    <section className="grocery-checklist" aria-labelledby="grocery-heading">
+      <h3 id="grocery-heading">Grocery checklist</h3>
+      <p>For dinner week {week} through {dateKey(days[6])}. Amounts are listed per day, without combining units.</p>
+      {groceryError && <p role="alert">{groceryError}</p>}
+      {error ? <p>Grocery checklist unavailable until dinner plans can be read.</p> : groceries.length ? <ul>{groceries.map(item =>
+        <li key={item.key}>
+          <label><input type="checkbox" checked={(checks[week] ?? []).includes(item.key)} disabled={!!groceryError} onChange={event => {
+            try {
+              const saved = dinnerStore.list();
+              setChecks(groceryStore.setChecked(saved, week, item.key, event.target.checked));
+              setGroceryError("");
+            } catch { setGroceryError("Grocery checkmark could not be saved. Saved dinners are unchanged. Reload to retry."); }
+          }} /> {item.name}<span className="visually-hidden"> for dinner week {week}</span></label>
+          <ul>{item.entries.map((entry, index) => <li key={index}><time dateTime={entry.date}>{entry.date}</time>: {entry.amount}</li>)}</ul>
+        </li>)}</ul> : <p>No groceries for this week. Add ingredients to a dinner to start your checklist.</p>}
+    </section>
     {editing && <form className="dinner-form" aria-label={`Dinner for ${editing}`} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); close(); } }} onSubmit={event => {
       event.preventDefault();
       if (!name.trim()) { setNameError(true); setError("Enter a dinner name."); nameInput.current?.focus(); return; }

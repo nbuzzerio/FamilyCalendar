@@ -54,3 +54,50 @@ export function createDinnerStore(storage: () => Pick<Storage, "getItem" | "setI
   } };
 }
 export const dinnerStore = createDinnerStore();
+
+export const GROCERIES_STORAGE_KEY = "family-calendar.groceries.v1";
+export interface GroceryItem { key: string; name: string; entries: { date: string; amount: string }[] }
+export function groceryItems(plans: DinnerPlans, dates: string[]): GroceryItem[] {
+  const items = new Map<string, GroceryItem>();
+  for (const date of dates) for (const ingredient of plans[date]?.ingredients ?? []) {
+    const name = ingredient.name.trim(), key = name.toLowerCase();
+    const item = items.get(key) ?? { key, name, entries: [] };
+    item.entries.push({ date, amount: ingredient.amount?.trim() || "Amount not specified" });
+    items.set(key, item);
+  }
+  return [...items.values()];
+}
+export type GroceryChecks = Record<string, string[]>;
+function dinnerWeek(date: string): string {
+  const day = new Date(`${date}T12:00:00`);
+  day.setDate(day.getDate() - (day.getDay() + 6) % 7);
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+}
+export function createGroceryStore(storage: () => Pick<Storage, "getItem" | "setItem"> = () => window.localStorage) {
+  function read(): GroceryChecks {
+    const value: unknown = JSON.parse(storage().getItem(GROCERIES_STORAGE_KEY) ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value) || !Object.entries(value).every(([week, keys]) =>
+      isLocalDate(week) && dinnerWeek(week) === week && Array.isArray(keys) && keys.every(key => typeof key === "string" && !!key.trim() && key === key.trim().toLowerCase()))) throw Error("Invalid grocery checkmarks");
+    return value as GroceryChecks;
+  }
+  function reconcile(plans: DinnerPlans): GroceryChecks {
+    const saved = read(), next: GroceryChecks = {};
+    for (const [week, keys] of Object.entries(saved)) {
+      const available = new Set(groceryItems(plans, Object.keys(plans).filter(date => dinnerWeek(date) === week)).map(item => item.key));
+      const retained = [...new Set(keys)].filter(key => available.has(key));
+      if (retained.length) next[week] = retained;
+    }
+    if (JSON.stringify(saved) !== JSON.stringify(next)) storage().setItem(GROCERIES_STORAGE_KEY, JSON.stringify(next));
+    return next;
+  }
+  return { reconcile, setChecked(plans: DinnerPlans, week: string, key: string, checked: boolean) {
+    if (!isLocalDate(week) || dinnerWeek(week) !== week || !groceryItems(plans, Object.keys(plans).filter(date => dinnerWeek(date) === week)).some(item => item.key === key)) throw Error("Ingredient unavailable");
+    const next = reconcile(plans);
+    const keys = new Set(next[week] ?? []);
+    if (checked) keys.add(key); else keys.delete(key);
+    if (keys.size) next[week] = [...keys]; else delete next[week];
+    storage().setItem(GROCERIES_STORAGE_KEY, JSON.stringify(next));
+    return next;
+  } };
+}
+export const groceryStore = createGroceryStore();
