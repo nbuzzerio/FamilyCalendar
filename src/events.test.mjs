@@ -46,8 +46,12 @@ test("download creates a JSON file only on invocation and cleans up its link and
     assert.equal(link.download, "family-calendar-backup-v1.json");
     assert.equal(blob.type, "application/json;charset=utf-8");
     assert.equal(JSON.parse(await blob.text()).version, 1);
+    downloadBackup({ getItem: key => key === "family-calendar.groceries.v1" ? "{}" : null });
+    assert.equal(clicked, 2); assert.equal(removed, 2);
+    assert.equal(link.download, "family-calendar-backup-v2.json");
+    assert.deepEqual(JSON.parse(await blob.text()), { format: "family-calendar-backup", version: 2, events: [], labels: [], dinners: {}, groceries: {} });
     await new Promise(resolve => setTimeout(resolve, 1100));
-    assert.equal(revoked, 1);
+    assert.equal(revoked, 2);
   } finally { globalThis.document = previous; URL.createObjectURL = create; URL.revokeObjectURL = revoke; }
 });
 import { createEventStore, expandEvents, localDate, dateKey, isLocalDate, isLocalTime, EVENTS_STORAGE_KEY } from "./events.ts";

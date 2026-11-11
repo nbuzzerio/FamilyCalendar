@@ -3,11 +3,13 @@ import { EVENTS_STORAGE_KEY, isEvent } from "./events.ts";
 // @ts-expect-error Explicit extensions support the existing Node strip-types test runner.
 import { LABELS_STORAGE_KEY, isLabel } from "./labels.ts";
 // @ts-expect-error Explicit extensions support the existing Node strip-types test runner.
-import { DINNERS_STORAGE_KEY, parseDinnerPlans } from "./dinners.ts";
+import { DINNERS_STORAGE_KEY, GROCERIES_STORAGE_KEY, parseDinnerPlans, parseGroceryChecks } from "./dinners.ts";
 
-/** Read the saved arrays directly: never normalize, filter, expand series or write. */
+/** Read the saved records directly: never normalize, filter, expand series or write. */
 export function serializeBackup(storage: Pick<Storage, "getItem">): string {
   const dinners = storage.getItem(DINNERS_STORAGE_KEY);
+  const groceries = storage.getItem(GROCERIES_STORAGE_KEY);
+  const extended = dinners !== null || groceries !== null;
   function read(key: string, valid: (value: unknown) => boolean): unknown[] {
     const raw = storage.getItem(key);
     const value: unknown = raw === null ? [] : JSON.parse(raw);
@@ -18,10 +20,10 @@ export function serializeBackup(storage: Pick<Storage, "getItem">): string {
   }
   return JSON.stringify({
     format: "family-calendar-backup",
-    version: 1,
+    version: extended ? 2 : 1,
     events: read(EVENTS_STORAGE_KEY, isEvent),
     labels: read(LABELS_STORAGE_KEY, isLabel),
-    ...(dinners === null ? {} : { dinners: parseDinnerPlans(dinners) }),
+    ...(extended ? { dinners: parseDinnerPlans(dinners), groceries: parseGroceryChecks(groceries) } : {}),
   }, null, 2);
 }
 
@@ -31,7 +33,7 @@ export function downloadBackup(storage: Pick<Storage, "getItem"> = window.localS
   const link = document.createElement("a");
   try {
     link.href = url;
-    link.download = "family-calendar-backup-v1.json";
+    link.download = `family-calendar-backup-v${JSON.parse(json).version}.json`;
     document.body.appendChild(link);
     link.click();
   } finally {

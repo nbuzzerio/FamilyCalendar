@@ -14,7 +14,13 @@ including events outside the visible dates, and does not include unsaved edits
 or appearance preferences. It never writes to storage. Invalid JSON, invalid
 records or unavailable storage prevent export rather than producing a partial
 backup. Missing storage keys export as empty arrays. Keep the file private.
-This ticket provides export only; no import or restore is available.
+When either dinner or grocery storage exists, export uses `version: 2` and
+`family-calendar-backup-v2.json`, retaining event/label arrays and adding
+`dinners` (date-to-plan records) and `groceries` (Monday-to-checked-name arrays).
+Missing dinner/grocery keys become empty objects. Version 1 is unchanged when
+both keys are absent. Consumers must explicitly support version 2. Export
+validates all saved data and preserves checkoffs without reconciliation or writes.
+This application provides export only; no import or restore is available.
 
 Use Add event to create an event with a title, local calendar date, and optional
 local time. Leave time blank for an all-day event. The weekly calendar displays
@@ -48,7 +54,7 @@ Native labeled checkboxes persist separately under `family-calendar.groceries.v1
 as Monday date keys mapped to normalized ingredient names. Checkmarks survive
 navigation/reload and remain while any dinner in that week needs the ingredient.
 Successful reconciliation removes absent ingredients, so reintroducing them starts
-unchecked. Checkmarks are not included in the dinner/calendar backup. Malformed or
+unchecked. Checkmarks are included in version-2 portable exports. Malformed or
 unavailable checkmark storage displays an alert and disables checkoff until a
 successful reload/storage refresh, while dinner editing remains available. Neither
 checkoff nor reconciliation writes dinner data. Failed reconciliation cannot
@@ -181,3 +187,18 @@ before saving. Stored invalid records follow the existing skip-on-read behavior.
 sorted occurrences without changing the stored series. Calendar views request only
 their visible dates. Upcoming includes recurring occurrences through one year from
 today; nonrecurring future events retain the existing unrestricted listing behavior.
+
+## Portable backup integration regression
+
+The multiweek component journey creates three dinners across two weeks, edits one,
+clears another, checks groceries in both weeks, remounts, and asserts independent
+saved plans and checks plus exact v2 export, event/label retention and zero export
+writes. Additional assertions cover grocery-only exports, absent keys, corrupt
+checks, preserved stale keys, v1 compatibility, and v1/v2 download filenames, MIME
+type, clicks and cleanup. All component tests use the existing simulated hook
+harness; remounting is not a real browser reload. Browser download delivery, real
+reload persistence, layout at narrow widths, keyboard focus and accessibility-tree
+behavior remain NOT_RUN pending the enrolled Studio runner. No browser execution
+API is available in this ticket session. If the enrolled suites do not assert the
+dinner/grocery journey and downloaded JSON, a separate owner decision is needed
+to enroll those assertions; these are automated coverage gaps, not human QA tasks.

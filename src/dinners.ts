@@ -73,12 +73,16 @@ function dinnerWeek(date: string): string {
   day.setDate(day.getDate() - (day.getDay() + 6) % 7);
   return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 }
+/** Validate saved checks without reconciling or writing storage. */
+export function parseGroceryChecks(raw: string | null): GroceryChecks {
+  const value: unknown = JSON.parse(raw ?? "{}");
+  if (!value || typeof value !== "object" || Array.isArray(value) || !Object.entries(value).every(([week, keys]) =>
+    isLocalDate(week) && dinnerWeek(week) === week && Array.isArray(keys) && keys.every(key => typeof key === "string" && !!key.trim() && key === key.trim().toLowerCase()))) throw Error("Invalid grocery checkmarks");
+  return value as GroceryChecks;
+}
 export function createGroceryStore(storage: () => Pick<Storage, "getItem" | "setItem"> = () => window.localStorage) {
   function read(): GroceryChecks {
-    const value: unknown = JSON.parse(storage().getItem(GROCERIES_STORAGE_KEY) ?? "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value) || !Object.entries(value).every(([week, keys]) =>
-      isLocalDate(week) && dinnerWeek(week) === week && Array.isArray(keys) && keys.every(key => typeof key === "string" && !!key.trim() && key === key.trim().toLowerCase()))) throw Error("Invalid grocery checkmarks");
-    return value as GroceryChecks;
+    return parseGroceryChecks(storage().getItem(GROCERIES_STORAGE_KEY));
   }
   function reconcile(plans: DinnerPlans): GroceryChecks {
     const saved = read(), next: GroceryChecks = {};

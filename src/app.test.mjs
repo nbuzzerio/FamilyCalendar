@@ -1191,3 +1191,55 @@ test("dinner accessibility structure labels native fields and reports storage fa
  button(tree, "Cancel dinner").props.onClick(); assert.equal(nodes(app.render(), n => n.type === "form").length, 0);
  app.unmount();
 });
+
+test("multiweek dinner journey reloads independently and exports versioned complete storage without writes", () => {
+ const values = new Map();
+ const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+ const meals = dinners.createDinnerStore(() => storage), checks = dinners.createGroceryStore(() => storage);
+ const dates = calendar.weekDays(new Date()).map(events.dateKey);
+ const next = events.dateKey(calendar.weekDays(new Date(), 1)[0]);
+ const ordinary = [{ id: "ordinary", title: "Event", date: dates[0], recurrence: { frequency: "Weekly" } }];
+ const savedLabels = [{ id: "family", name: "Family", kind: "Person", color: "#123456" }];
+ storage.setItem(events.EVENTS_STORAGE_KEY, JSON.stringify(ordinary));
+ storage.setItem(labels.LABELS_STORAGE_KEY, JSON.stringify(savedLabels));
+ const mount = () => harness("./DinnerRoster.tsx", { "./events": events, "./calendar": calendar, "./dinners": { ...dinners, dinnerStore: meals, groceryStore: checks } }, { runMountEffects: true, addEventListener() {}, removeEventListener() {}, confirm: () => true });
+ let app = mount(); app.render();
+ const plan = (date, name) => {
+  button(app.render(), `Plan dinner for ${date}`).props.onClick({ currentTarget: { focus() {} } });
+  change(field(app.render(), "Dinner name"), name);
+  change(field(app.render(), "Ingredients"), "Rice | 1 cup"); submit(app.render());
+ };
+ plan(dates[0], "First"); plan(dates[1], "Second");
+ const box = () => nodes(section(app.render(), "grocery-heading"), n => n.type === "input" && n.props.type === "checkbox")[0];
+ box().props.onChange({ target: { checked: true } });
+ button(app.render(), "Next dinner week").props.onClick(); plan(next, "Next week");
+ assert.equal(box().props.checked, false);
+ box().props.onChange({ target: { checked: true } });
+ button(app.render(), "Previous dinner week").props.onClick();
+ button(app.render(), `Edit dinner for ${dates[0]}`).props.onClick({ currentTarget: { focus() {} } });
+ change(field(app.render(), "Dinner name"), "Edited"); submit(app.render());
+ button(app.render(), `Edit dinner for ${dates[1]}`).props.onClick({ currentTarget: { focus() {} } });
+ button(app.render(), "Remove dinner").props.onClick();
+ app.unmount(); app = mount(); app.render();
+ assert.match(text(app.render()), /Edited/); assert.equal(box().props.checked, true);
+ assert.ok(button(app.render(), `Plan dinner for ${dates[1]}`));
+ button(app.render(), "Next dinner week").props.onClick();
+ assert.match(text(app.render()), /Next week/); assert.equal(box().props.checked, true);
+ const before = [...values]; const payload = JSON.parse(serializeBackup(storage));
+ assert.equal(payload.version, 2);
+ assert.deepEqual(payload.events, ordinary); assert.deepEqual(payload.labels, savedLabels);
+ assert.deepEqual(payload.dinners, meals.list());
+ assert.deepEqual(payload.groceries, { [dates[0]]: ["rice"], [next]: ["rice"] });
+ assert.equal(payload.dinners[dates[1]], undefined); assert.deepEqual([...values], before);
+ app.unmount();
+});
+
+test("v2 backup handles grocery-only storage and rejects corrupt checks without partial output or writes", () => {
+ const raw = '{"2026-12-28":["rice","obsolete"]}';
+ assert.deepEqual(JSON.parse(serializeBackup({ getItem: key => key === dinners.GROCERIES_STORAGE_KEY ? raw : null })), {
+  format: "family-calendar-backup", version: 2, events: [], labels: [], dinners: {}, groceries: { "2026-12-28": ["rice", "obsolete"] }
+ });
+ for (const raw of ["broken", "[]", '{"2026-12-29":["rice"]}', '{"2026-12-28":["Rice"]}', '{"2026-12-28":[3]}']) {
+  assert.throws(() => serializeBackup({ getItem: key => key === dinners.GROCERIES_STORAGE_KEY ? raw : null }));
+ }
+});
