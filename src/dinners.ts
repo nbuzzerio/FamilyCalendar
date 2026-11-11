@@ -6,6 +6,19 @@ export interface Dinner { name: string; cook?: string; notes?: string; ingredien
 export type DinnerPlans = Record<string, Dinner>;
 export const DINNERS_STORAGE_KEY = "family-calendar.dinners.v1";
 
+export function parseIngredients(text: string): Ingredient[] {
+  return text.split(/[,\n]/).map(entry => entry.trim()).filter(Boolean).map(entry => {
+    const [name, ...quantity] = entry.split("|");
+    if (!name.trim()) throw new Error("Enter an ingredient name before its quantity.");
+    const amount = quantity.join("|").trim();
+    return { name: name.trim(), ...(amount ? { amount } : {}) };
+  });
+}
+
+export function formatIngredients(items: Ingredient[]): string {
+  return items.map(item => `${item.name}${item.amount ? ` | ${item.amount}` : ""}`).join("\n");
+}
+
 export function isDinner(value: unknown): value is Dinner {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const dinner = value as Record<string, unknown>;
