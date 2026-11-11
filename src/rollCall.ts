@@ -6,7 +6,7 @@ export const availabilityStates = ["Unknown", "Available", "Unavailable"] as con
 export type Availability = typeof availabilityStates[number];
 export type RollCall = Record<string, Record<string, Availability>>;
 export function availabilityFor(saved: RollCall, date: string, person: string): Availability {
-  return Object.hasOwn(saved, date) && Object.hasOwn(saved[date], person) ? saved[date][person] : "Unknown";
+  return Object.hasOwn(saved, date) && Object.hasOwn(saved[date], person) ? saved[date][person] : "Available";
 }
 export function createRollCallStore(storage: () => Pick<Storage, "getItem" | "setItem"> = () => window.localStorage) {
   function list(): RollCall {

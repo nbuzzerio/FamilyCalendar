@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { dateKey } from "./events";
 import { weekDays } from "./calendar";
+import { availabilityFor, type RollCall } from "./rollCall";
 import { DinnerRollCall } from "./DinnerRollCall";
 import type { CalendarLabel } from "./labels";
 import { dinnerStore, groceryStore, groceryItems, parseIngredients, formatIngredients, type DinnerPlans, type GroceryChecks } from "./dinners";
 
 export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
+  const [availability, setAvailability] = useState<RollCall | null>(null);
+  const people = labels.filter(label => label.kind === "Person");
   const [anchor, setAnchor] = useState(() => new Date());
   const [plans, setPlans] = useState<DinnerPlans>({});
   const [checks, setChecks] = useState<GroceryChecks>({});
@@ -58,9 +61,10 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
         <button type="button" disabled={!!editing} aria-label={`${dinner ? "Edit" : "Plan"} dinner for ${key}`} onClick={event => {
           trigger.current = event.currentTarget; setEditing(key); setName(dinner?.name ?? ""); setCook(dinner?.cook ?? ""); setNotes(dinner?.notes ?? ""); setIngredients(formatIngredients(dinner?.ingredients ?? [])); setNotice(""); setNameError(false); setError("");
         }}>{dinner ? "Edit dinner" : "Plan dinner"}</button>
+        <p className="dinner-availability" aria-live="polite" aria-atomic="true">{availability === null ? "Availability unavailable" : `${people.filter(person => availabilityFor(availability, key, person.id) === "Available").length} of ${people.length} available`}</p>
       </li>;
     })}</ol>
-    <DinnerRollCall days={days} labels={labels} />
+    <DinnerRollCall days={days} labels={labels} onAvailabilityChange={setAvailability} />
     <section className="grocery-checklist" aria-labelledby="grocery-heading">
       <h3 id="grocery-heading">Grocery checklist</h3>
       <p>For dinner week {week} through {dateKey(days[6])}. Amounts are listed per day, without combining units.</p>

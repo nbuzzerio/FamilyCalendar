@@ -45,10 +45,11 @@ using Node's built-in runner without additional dependencies.
 ## Dinner groceries
 
 Dinner Roll Call uses existing Person label IDs and the Dinner Roster Monday–Sunday
-week controls. Each date/person starts Unknown; choose Available, Unavailable or
+week controls. Each date/person starts Available unless a response is saved; choose Available, Unavailable or
 Unknown directly. Only Available contributes to the count. Renaming a label keeps
 responses; deleting it or changing it to Category hides it without changing events
-or plans. Hidden responses remain stored by ID; a new label starts Unknown.
+or plans. Hidden responses remain stored by ID; a new label starts Available. Explicit Unknown responses remain Unknown.
+Each dinner plan card also shows the current available count.
 Responses use `family-calendar.roll-call.v1` in localStorage. Invalid saved data
 is left untouched and editing is disabled with an error. Portable Backup's existing
 v1/v2 contract is unchanged: Roll Call responses are **not exported** or restored.
