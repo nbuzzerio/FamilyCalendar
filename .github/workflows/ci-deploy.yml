@@ -1,0 +1,83 @@
+name: Calendar CI and deployment
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      digest: ${{ steps.package.outputs.digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.9.0
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm test
+      - name: Typecheck and build the production application
+        run: pnpm build
+      - name: Verify and package the production bundle
+        id: package
+        run: |
+          python3 deploy/bundle.py dist calendar.zip "$GITHUB_SHA"
+          sha256sum calendar.zip | awk '{print "digest="$1}' >> "$GITHUB_OUTPUT"
+      - name: Test release integrity, activation, recovery and retention
+        run: python3 tests/test_release.py
+      - name: Install Chromium and Nginx for loopback smoke
+        run: |
+          pnpm exec playwright-core install --with-deps chromium --only-shell
+          sudo apt-get update
+          sudo apt-get install -y nginx
+      - name: Exercise the packaged site through Nginx and HTTPS
+        run: python3 tests/nginx_smoke.py calendar.zip "$GITHUB_SHA"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: calendar-release
+          path: calendar.zip
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  deploy:
+    needs: check
+    if: github.repository == 'nbuzzerio/FamilyCalendar' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: calendar-production
+      url: https://www.nickbuzzerio.com/apps/calendar/
+    concurrency:
+      group: calendar-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: calendar-release
+          path: ${{ runner.temp }}/calendar-artifact
+      - name: Publish checked bytes and verify the public HTTPS release
+        env:
+          CALENDAR_DEPLOY_KEY: ${{ secrets.CALENDAR_DEPLOY_KEY }}
+          CALENDAR_SSH_HOST: ${{ vars.CALENDAR_SSH_HOST }}
+          CALENDAR_SSH_PORT: ${{ vars.CALENDAR_SSH_PORT }}
+          CALENDAR_SSH_HOST_KEY: ${{ vars.CALENDAR_SSH_HOST_KEY }}
+          ARTIFACT_SHA256: ${{ needs.check.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash deploy/publish.sh "$RUNNER_TEMP/calendar-artifact/calendar.zip"

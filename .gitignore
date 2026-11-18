@@ -9,3 +9,5 @@ dist/
 
 
 .dev/
+__pycache__/
+/calendar.zip

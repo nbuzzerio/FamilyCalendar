@@ -4,11 +4,12 @@
     "@types/react-dom": "19.2.5",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "playwright-core": "1.65.1",
     "typescript": "5.9.3",
     "vite": "7.3.6"
   },
   "dependency_lock_file": "pnpm-lock.yaml",
-  "dependency_lock_sha256": "2945c3de7b6f910e8e6b1aa29f393fd8eb3f7dc7629d98f2495ec2f463ea2496",
+  "dependency_lock_sha256": "b2a78d9661766e65281c8076134a11e240027cae98c2491293c17feb90607c1d",
   "node_sha256": "9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de",
   "node_version": "24.18.0",
   "pnpm_cli_sha256": "ff3224d46b47fbb24a7e9fe15fededef7e00892d07d4e376b6762d4899906bfd",
