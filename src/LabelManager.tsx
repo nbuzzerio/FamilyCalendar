@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
-import { labelStore, labelTextColor, type CalendarLabel, type LabelInput } from "./labels";
+import { labelTextColor, type CalendarLabel, type LabelInput } from "./labels";
+
+import { labelStore, commit } from "./sync/calendar-data";
 
 export function LabelManager({ labels, onChange }: { labels: CalendarLabel[]; onChange: () => void }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -10,9 +12,9 @@ export function LabelManager({ labels, onChange }: { labels: CalendarLabel[]; on
   const [notice, setNotice] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
   function reset() { setEditing(null); setName(""); setKind("Person"); setColor("#355d39"); }
-  function mutate(action: () => void, message: string) {
-    try { action(); onChange(); setError(""); setNotice(message); return true; }
-    catch (error) { setError(error instanceof Error ? error.message : "Unable to save label."); setNotice(""); return false; }
+  const original = useRef<CalendarLabel | undefined>(undefined);
+  function mutate(action: () => void, message: string, after: () => void) {
+    commit(action, () => { onChange(); setError(""); setNotice(message); after(); }, error => { setError(error.message); setNotice(""); });
   }
   return <section aria-labelledby="labels-heading">
     <h2 id="labels-heading">People and categories</h2>
@@ -20,19 +22,19 @@ export function LabelManager({ labels, onChange }: { labels: CalendarLabel[]; on
     <ul className="label-list">{labels.map(label => <li key={label.id}>
       <span className="label-badge" style={{ backgroundColor: label.color, color: labelTextColor(label.color) }}>{label.kind}: {label.name}</span>{" "}
       <button type="button" aria-label={`Edit label ${label.name}`} onClick={() => {
-        setEditing(label.id); setName(label.name); setKind(label.kind); setColor(label.color); setError(""); setNotice(""); nameInput.current?.focus();
+        original.current = label; setEditing(label.id); setName(label.name); setKind(label.kind); setColor(label.color); setError(""); setNotice(""); nameInput.current?.focus();
       }}>Edit</button>{" "}
       <button type="button" aria-label={`Delete label ${label.name}`} onClick={() => {
-        if (mutate(() => labelStore.delete(label.id), "Label deleted. Associated events kept." ) && editing === label.id) reset();
+        mutate(() => labelStore.delete(label.id, label), "Label deleted. Associated events kept.", () => { if (editing === label.id) reset(); });
       }}>Delete</button>
     </li>)}</ul>
     <h3>{editing ? "Edit label" : "Add label"}</h3>
     <form className="event-form" onSubmit={event => {
       event.preventDefault();
-      if (mutate(() => {
+      mutate(() => {
         const input = { name, kind, color };
-        if (editing) labelStore.update(editing, input); else labelStore.create(input);
-      }, editing ? "Label updated." : "Label added.")) reset();
+        if (editing) labelStore.update(editing, input, original.current); else labelStore.create(input);
+      }, editing ? "Label updated." : "Label added.", reset);
     }}>
       <label>Label name <input id="label-name" ref={nameInput} required value={name} onChange={event => setName(event.target.value)} /></label>
       <label>Label type <select value={kind} onChange={event => setKind(event.target.value as LabelInput["kind"])}>

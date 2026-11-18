@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { dateKey, expandEvents, eventStore, isRecurrenceRule, type CalendarEvent, type RecurrenceFrequency } from "./events";
+import { dateKey, expandEvents, isRecurrenceRule, type CalendarEvent, type RecurrenceFrequency } from "./events";
 import { monthDays, upcomingEvents, weekDays, navigationDate, moveDate, watchToday } from "./calendar";
-import { labelStore, labelTextColor } from "./labels";
+import { labelTextColor } from "./labels";
 import { LabelManager } from "./LabelManager";
 import { AppearanceSelector } from "./AppearanceSelector";
-import { downloadBackup } from "./backup";
+import { eventStore, labelStore, commit } from "./sync/calendar-data";
+import { SyncPanel } from "./SyncPanel";
 import { DinnerRoster } from "./DinnerRoster";
 
 export function App() {
@@ -19,8 +20,7 @@ export function App() {
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
   const [notice, setNotice] = useState("");
-  const [backupNotice, setBackupNotice] = useState("");
-  const [backupError, setBackupError] = useState("");
+  const editOriginal = useRef<CalendarEvent | undefined>(undefined);
   const [error, setError] = useState("");
   const [endDateError, setEndDateError] = useState("");
   const [today, setToday] = useState(() => new Date());
@@ -131,28 +131,22 @@ export function App() {
   });
   useEffect(() => {
     const refresh = () => { setEvents(eventStore.list()); setLabels(labelStore.list()); };
-    window.addEventListener("storage", refresh);
-    return () => window.removeEventListener("storage", refresh);
+    window.addEventListener("calendar-update", refresh);
+    return () => window.removeEventListener("calendar-update", refresh);
   }, []);
-  function mutate(action: () => void) {
-    try {
-      action();
-      setEvents(eventStore.list());
-      setError("");
-      return true;
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Unable to save event.");
-      setNotice("");
-      return false;
-    }
+  function mutate(action: () => void, after: () => void) {
+    commit(action, () => { setEvents(eventStore.list()); setError(""); after(); }, error => {
+      setError(error.message); setNotice("");
+    });
   }
   function editEvent(occurrence: CalendarEvent, trigger?: HTMLElement) {
     editTrigger.current = trigger ?? null;
     const event = events.find(item => item.id === occurrence.id) ?? occurrence;
+    editOriginal.current = event;
     setFrequency(event.recurrence?.frequency ?? "Never"); setEndDate(event.recurrence?.endDate ?? "");
     setEditing(event.id); setTitle(event.title); setEventDate(event.date); setEventTime(event.time ?? "");
     setNotes(event.notes ?? "");
-    setLabelId(labels.some(label => label.id === event.labelId) ? event.labelId! : "");
+    setLabelId(event.labelId ?? "");
     setNotice(""); setError(""); setEndDateError("");
     titleInput.current?.focus();
   }
@@ -161,13 +155,13 @@ export function App() {
       <button type="button" onClick={click => editEvent(event, click?.currentTarget)} aria-label={`Edit ${event.title}`}>Edit</button>
       <button type="button" onClick={() => {
         if (!window.confirm(`Delete "${event.title}"${event.recurrence && event.recurrence.frequency !== "Never" ? " and all occurrences" : ""}? This cannot be undone.`)) return;
-        if (mutate(() => eventStore.delete(event.id))) {
+        mutate(() => eventStore.delete(event.id, events.find(item => item.id === event.id)), () => {
           if (editing === event.id) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); }
           setNotice("Event deleted.");
           setEndDateError("");
           editTrigger.current = null;
           restoreFocus();
-        }
+        });
       }} aria-label={`Delete ${event.title}`}>Delete</button>
     </div>;
   }
@@ -208,7 +202,7 @@ export function App() {
 
   return (
     <main>
-      <h1>Family Calendar</h1>
+      <header className="calendar-header"><h1>Family Calendar</h1><SyncPanel /></header>
       <AppearanceSelector />
       <p>A private calendar for our family.</p>
       <nav className="view-selector" aria-label="Calendar view">
@@ -218,18 +212,6 @@ export function App() {
       </nav>
       {viewError && <p role="alert">{viewError}</p>}
       <p className="visually-hidden" role="status" aria-atomic="true">{view === "week" ? `Week of ${formatDate(days[0])}` : view === "month" ? monthTitle(month) : `${monthTitle(threeMonths[0])} through ${monthTitle(threeMonths[2])}`}. Selected date {formatDate(navigation.date)}.</p>
-      <button type="button" onClick={() => {
-        try {
-          downloadBackup();
-          setBackupError("");
-          setBackupNotice("Backup download requested. Keep this file private; it contains your saved events, notes, labels and any dinner plans.");
-        } catch {
-          setBackupNotice("");
-          setBackupError("Backup could not be exported. Saved data was not changed. Check that browser storage is accessible and contains valid calendar data.");
-        }
-      }}>Export backup</button>
-      <p role="status">{backupNotice}</p>
-      {backupError && <p role="alert">{backupError}</p>}
       {view === "week" ?
       <section className="weekly-calendar" aria-labelledby="weekly-calendar-heading">
         <header className="week-header">
@@ -363,11 +345,11 @@ export function App() {
           const original = events.find(item => item.id === editing);
           if (editing && (frequency !== "Never" || (original?.recurrence && original.recurrence.frequency !== "Never")) &&
             !window.confirm(`Save changes to the entire series "${original?.title ?? title}"? All occurrences of this series will be affected.`)) return;
-          if (mutate(() => {
-            const input = { title, date: eventDate, notes, ...(frequency === "Never" ? {} : { recurrence: { frequency, ...(endDate ? { endDate } : {}) } }), ...(labels.some(label => label.id === labelId) ? { labelId } : {}), ...(eventTime ? { time: eventTime } : {}) };
-            if (editing) eventStore.update(editing, input);
+          mutate(() => {
+            const input = { title, date: eventDate, notes, ...(frequency === "Never" && !(editing && editOriginal.current?.recurrence?.frequency === "Never") ? {} : { recurrence: { frequency, ...(endDate ? { endDate } : {}) } }), ...(labelId ? { labelId } : {}), ...(eventTime ? { time: eventTime } : {}) };
+            if (editing) eventStore.update(editing, input, editOriginal.current);
             else eventStore.create(input);
-          })) { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setNotice(editing ? "Event updated." : "Event added."); restoreFocus(); }
+          }, () => { setEditing(null); setTitle(""); setEventTime(""); setNotes(""); setLabelId(""); setFrequency("Never"); setEndDate(""); setNotice(editing ? "Event updated." : "Event added."); restoreFocus(); });
         }}>
           <label>Title <input ref={titleInput} required value={title} onChange={event => setTitle(event.target.value)} /></label>{" "}
           <label>Date <input required type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} /></label>{" "}
@@ -385,8 +367,9 @@ export function App() {
           {endDateError && <p id="recurrence-end-error" role="alert">{endDateError}</p>}
           <p id="recurrence-help" className="form-help">Editing or deleting a repeating event changes all occurrences of the entire series. Individual occurrences and future-only changes are not supported.</p>
           <label>Person or category (optional)
-            <select value={labels.some(label => label.id === labelId) ? labelId : ""} onChange={event => setLabelId(event.target.value)}>
+            <select value={labelId} onChange={event => setLabelId(event.target.value)}>
               <option value="">No label</option>
+              {labelId && !labels.some(label => label.id === labelId) && <option value={labelId}>Historical label ({labelId})</option>}
               {labels.map(label => <option key={label.id} value={label.id}>{label.kind}: {label.name}</option>)}
             </select>
           </label>

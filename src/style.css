@@ -18,6 +18,18 @@
 }
 
 * { box-sizing: border-box; }
+.calendar-header h1 { margin-bottom: .5rem; }
+.sync-panel { max-width: 48rem; }
+.sync-summary { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .8rem; }
+.sync-summary small, .sync-settings summary { color: var(--muted); }
+.sync-settings { margin: .6rem 0 1rem; }
+.sync-settings summary { cursor: pointer; padding: .4rem 0; }
+.sync-settings fieldset { margin: .8rem 0; min-width: 0; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); }
+.sync-settings label { display: block; margin: .6rem 0; }
+.sync-settings input:not([type=checkbox]), .sync-settings select { display: block; max-width: 100%; margin-top: .3rem; }
+.sync-settings article + article { border-top: 1px solid var(--border); }
+.sync-settings pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sync-settings button { margin: .2rem .4rem .2rem 0; min-height: 44px; }
 body { margin: 0; }
 .dinner-roster { margin: 2.5rem 0; }
 .roll-call { margin: 2rem 0; }

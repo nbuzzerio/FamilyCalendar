@@ -1,107 +1,24 @@
 # Family Calendar
 
-Minimal React/Vite/TypeScript scaffold prepared on Windows for Phase 7B review.
-The eventual private Dellbox deployment is future work. Events are stored in this
-browser's localStorage; there is no authentication, backend, sync or hosting setup.
+Family Calendar is a local-first React application for events, dinner attendance, dinner plans and weekly groceries. It saves on this device using IndexedDB. After setup, it shares confirmed edits through the household's Personal Sync Service.
 
-## Events
+## Connect a browser
 
-Use **Export backup** to download `family-calendar-backup-v1.json` containing
-the saved event and label arrays in a `family-calendar-backup` envelope with
-`version: 1`. All stored fields, IDs, colors, notes and recurrence definitions
-are preserved; series are not expanded. Export reads saved browser data afresh,
-including events outside the visible dates, and does not include unsaved edits
-or appearance preferences. It never writes to storage. Invalid JSON, invalid
-records or unavailable storage prevent export rather than producing a partial
-backup. Missing storage keys export as empty arrays. Keep the file private.
-When either dinner or grocery storage exists, export uses `version: 2` and
-`family-calendar-backup-v2.json`, retaining event/label arrays and adding
-`dinners` (date-to-plan records) and `groceries` (Monday-to-checked-name arrays).
-Missing dinner/grocery keys become empty objects. Version 1 is unchanged when
-both keys are absent. Consumers must explicitly support version 2. Export
-validates all saved data and preserves checkoffs without reconciliation or writes.
-This application provides export only; no import or restore is available.
+Open **Advanced sync settings** and export the complete local backup. Sign in with the household password if prompted, select an active shared Space and match Calendar Person labels to directory People. Check the consent box, download the comparison, then review and approve it. Same-ID differences have separate choices for this device and the shared copy. The header **Sync** button checks immediately. Saves, opening, reconnecting and returning to the app also trigger synchronization.
 
-Use Add event to create an event with a title, local calendar date, and optional
-local time. Leave time blank for an all-day event. The weekly calendar displays
-events on their saved dates, with all-day events first, followed by timed events
-in ascending time order. Existing date-only events remain all-day events. Upcoming
-and past events have Edit and Delete controls. Events survive refresh in the same
-browser profile. Clearing browser storage removes them. Storage failures display
-an error without reporting a successful save.
+The version 3 backup includes the original Calendar storage strings, explicit attendance, hidden label references, current records and pending work. **Recover a backup** opens versions 1, 2 and 3 in an empty Calendar browser profile. Recovering a file requires another review before sharing. The build includes an offline app shell for returning to a previously opened Calendar.
 
-Use Previous week and Next week to browse the calendar, or This week to return
-to the current week. Edit and Delete controls are available on calendar events
-and event lists. Editing focuses the form; Save event persists the changes, while
-Cancel leaves the saved event unchanged. Upcoming Events always shows saved events
-from today onward, ordered by date and time, independently of the selected week.
+## Using Calendar
 
-`src/events.ts` exports the typed event model and a store with `create`, `update`,
-`delete` and `list` operations. Dates stay as `YYYY-MM-DD` strings without UTC
-conversion. Invalid stored JSON is treated as empty; invalid or duplicate records
-are skipped. `pnpm test` exercises persistence, CRUD, validation and storage errors
-using Node's built-in runner without additional dependencies.
+Week, Month and 3 Months share the same source events. Dates and optional times use the local calendar. An event without a time is all day. Upcoming events are independent of the visible week. Editing or deleting an occurrence acts on the whole series. Notes, labels and their colors stay with their source records. Appearance and calendar view are preferences for this browser.
 
-## Dinner groceries
+Dinner Roll Call uses the dinner roster's Monday through Sunday week. **Available (default)** clears an explicit answer. **Available**, **Unavailable** and **Unknown** each save a response for one diner and date. Removing a Person label from the roster preserves historical attendance.
 
-Dinner Roll Call uses existing Person label IDs and the Dinner Roster Monday–Sunday
-week controls. Each date/person starts Available unless a response is saved; choose Available, Unavailable or
-Unknown directly. Only Available contributes to the count. Renaming a label keeps
-responses; deleting it or changing it to Category hides it without changing events
-or plans. Hidden responses remain stored by ID; a new label starts Available. Explicit Unknown responses remain Unknown.
-Each dinner plan card also shows the current available count.
-Responses use `family-calendar.roll-call.v1` in localStorage. Invalid saved data
-is left untouched and editing is disabled with an error. Portable Backup's existing
-v1/v2 contract is unchanged: Roll Call responses are **not exported** or restored.
+Dinner plans preserve the cook as free text. Grocery rows group ingredient names across that dinner week and show each dated amount. Checkmarks synchronize per week. Removing an ingredient through a dinner edit clears its checkmark when the last dinner using it is removed from a fully loaded week.
 
-Calendar view choices (Week, Month and 3 Months) persist in
-`family-calendar-view`. Invalid or unreadable preferences fall back to Week;
-failed writes leave the chosen view usable and show an alert. Dinner navigation
-uses **Current dinner week** to distinguish it from the calendar's Today action.
-Follow-up component regressions verify all three view choices after remount,
-invalid/denied storage, write-failure feedback and one Today-named button across
-the calendar and dinner component output. These are not browser accessibility
-tree or real page-reload assertions. Studio must rerun calendar-journey checks
-28 (navigation/year boundaries) and 37 (appearance/view reload persistence)
-after checkpointing. The recorded runner.cjs authorized-pin mismatch requires
-Studio to reconcile its protected runner evidence; application changes cannot
-resolve that verification preparation failure.
+See the [Personal Sync integration report](docs/PERSONAL_SYNC_INTEGRATION_REPORT.md) for the storage mapping, recovery procedure, local verification and release status.
 
-The Grocery checklist follows the selected **dinner week**. Ingredient names are
-trimmed and compared case-insensitively; the first spelling in date/entry order
-is displayed. Each original amount is shown with its dinner date, including
-multiple entries on the same day. Amounts are never added or converted; missing
-amounts say “Amount not specified”. Dinner changes update the checklist on save.
-
-Native labeled checkboxes persist separately under `family-calendar.groceries.v1`,
-as Monday date keys mapped to normalized ingredient names. Checkmarks survive
-navigation/reload and remain while any dinner in that week needs the ingredient.
-Successful reconciliation removes absent ingredients, so reintroducing them starts
-unchecked. Checkmarks are included in version-2 portable exports. Malformed or
-unavailable checkmark storage displays an alert and disables checkoff until a
-successful reload/storage refresh, while dinner editing remains available. Neither
-checkoff nor reconciliation writes dinner data. Failed reconciliation cannot
-persist removal of stale checkmarks until storage becomes available again.
-
-Automated coverage in `src/app.test.mjs` asserts exact deduplicated rows and dated
-amounts, missing amounts, empty weeks, shared-ingredient retention, removal and
-reintroduction, independent week state, checked/unchecked persistence after store
-and component recreation, immediate form-save recalculation, corrupt storage
-preservation, read/write failures, and dinner saves despite checkmark corruption.
-Component assertions check native checkbox props, wrapping labels with ingredient
-and week, disabled failure controls and visible errors. This harness executes the
-component handlers but does not run a browser or accessibility tree.
-
-Browser coverage remains **NOT_RUN** in this session: no browser tool is exposed,
-and the enrolled Studio runner executes after checkpointing. The existing browser
-contract does not name grocery assertions. Required additional browser assertions
-are: actual labeled checkbox accessible names and Space-key toggling; real
-localStorage persistence after page reload; week navigation isolation; edit/remove
-recalculation with a shared ingredient; empty state; storage-denied alerts without
-dinner loss; and narrow-screen wrapping/focus visibility. These are automated
-verification gaps, not a human QA assignment. A separate owner decision is needed
-to enroll grocery-specific browser coverage if the host suite cannot cover them;
-no tooling or dependency changes are included here.
+For an interactive synthetic household, run `pnpm.cmd dev:sync`. The command builds Calendar, starts the local service and prints its loopback address and fixture password. Each launch creates a separate database under `.dev/sync-tests/`.
 
 ## Pinned tools
 
@@ -128,6 +45,7 @@ pnpm.cmd install --frozen-lockfile --ignore-scripts
 pnpm.cmd test
 pnpm.cmd run typecheck
 pnpm.cmd run build
+pnpm.cmd run test:sync
 pnpm.cmd run dev
 ```
 
@@ -200,28 +118,9 @@ Monthly and yearly rules clamp unavailable days without moving the original anch
 (January 31 returns to March 31; leap-day yearly rules return to February 29 in leap years).
 Dates and optional wall-clock times remain local, including during DST changes.
 
-The existing `family-calendar.events.v1` array stores one event per series, with an
-optional `recurrence: { frequency, endDate? }` rule. Missing recurrence means Never;
-no migration or occurrence records are written. Labels and their colors retain the
-existing separate storage. Invalid rules and end dates before the start are rejected
-before saving. Stored invalid records follow the existing skip-on-read behavior.
+IndexedDB stores one event per series with an optional recurrence rule and inclusive end date. Migration retains original source dates and raw historical entries that require review.
 
 `expandEvents` takes an inclusive local-date range of at most 3660 days and returns
 sorted occurrences without changing the stored series. Calendar views request only
 their visible dates. Upcoming includes recurring occurrences through one year from
 today; nonrecurring future events retain the existing unrestricted listing behavior.
-
-## Portable backup integration regression
-
-The multiweek component journey creates three dinners across two weeks, edits one,
-clears another, checks groceries in both weeks, remounts, and asserts independent
-saved plans and checks plus exact v2 export, event/label retention and zero export
-writes. Additional assertions cover grocery-only exports, absent keys, corrupt
-checks, preserved stale keys, v1 compatibility, and v1/v2 download filenames, MIME
-type, clicks and cleanup. All component tests use the existing simulated hook
-harness; remounting is not a real browser reload. Browser download delivery, real
-reload persistence, layout at narrow widths, keyboard focus and accessibility-tree
-behavior remain NOT_RUN pending the enrolled Studio runner. No browser execution
-API is available in this ticket session. If the enrolled suites do not assert the
-dinner/grocery journey and downloaded JSON, a separate owner decision is needed
-to enroll those assertions; these are automated coverage gaps, not human QA tasks.

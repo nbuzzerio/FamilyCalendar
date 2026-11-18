@@ -26,7 +26,7 @@ test("roll call defaults, repeated updates, reload, year boundary and unrelated 
  assert.equal(rollCall.availabilityFor(store.list(), "2027-01-07", "p"), "Available");
  assert.equal(rollCall.availabilityFor(store.list(), "2026-12-31", "p"), "Available");
  assert.equal(rollCall.availabilityFor(store.list(), "2027-01-01", "p"), "Unavailable");
- assert.deepEqual(Object.keys(JSON.parse(serializeBackup(storage))).sort(), ["dinners", "events", "format", "groceries", "labels", "version"]);
+ assert.equal(JSON.parse(serializeBackup(storage)).raw[rollCall.ROLL_CALL_STORAGE_KEY], values.get(rollCall.ROLL_CALL_STORAGE_KEY));
  const saved = values.get(rollCall.ROLL_CALL_STORAGE_KEY); fail = true;
  assert.throws(() => store.save("2026-12-31", "p", "Unknown"));
  assert.equal(values.get(rollCall.ROLL_CALL_STORAGE_KEY), saved); fail = false;
@@ -48,9 +48,9 @@ test("roll call component labels controls, counts only available, renames/delete
  const render = () => app.render(props);
  render();
  const controls = () => nodes(render(), n => n.type === "select");
- assert.equal(controls().length, 7); assert.ok(controls().every(n => n.props.value === "Available"));
+ assert.equal(controls().length, 7); assert.ok(controls().every(n => n.props.value === ""));
  assert.equal(controls()[0].props["aria-label"], "Dinner availability for Pat on 2026-12-28");
- assert.deepEqual(nodes(controls()[0], n => n.type === "option").map(text), ["Unknown", "Available", "Unavailable"]);
+ assert.deepEqual(nodes(controls()[0], n => n.type === "option").map(text), ["Available (default)", "Unknown", "Available", "Unavailable"]);
  assert.match(text(render()), /1 of 1 available/);
  change(controls()[0], "Available"); assert.match(text(render()), /1 of 1 available/);
  assert.match(text(nodes(render(), n => n.props.role === "status")), /Pat: Available for 2026-12-28/);
@@ -59,16 +59,16 @@ test("roll call component labels controls, counts only available, renames/delete
  change(controls()[0], "Unknown");
  app = mount(); render(); assert.equal(controls()[0].props.value, "Unknown");
  props = { ...props, days: calendar.weekDays(new Date(2027, 0, 4, 12)) };
- assert.ok(controls().every(n => n.props.value === "Available"));
+ assert.ok(controls().every(n => n.props.value === ""));
  props = { ...props, days: calendar.weekDays(new Date(2026, 11, 31, 12)) };
  change(controls()[0], "Unavailable"); assert.match(text(render()), /0 of 1 available/);
  props = { ...props, labels: [] }; assert.equal(controls().length, 0);
  assert.equal(nodes(render(), n => n.type === "a")[0].props.href, "#label-name");
  props = { ...props, labels: [{ id: "new", name: "Patricia", kind: "Person" }] };
- assert.equal(controls()[0].props.value, "Available");
+ assert.equal(controls()[0].props.value, "");
  fail = true; change(controls()[0], "Available");
  assert.ok(controls().every(n => n.props.disabled)); assert.match(text(render()), /could not be saved/);
- assert.equal(controls()[0].props.value, "Available");
+ assert.equal(controls()[0].props.value, "");
  values.set(rollCall.ROLL_CALL_STORAGE_KEY, "broken"); app = mount(); render();
  assert.match(text(render()), /could not be read/); assert.ok(controls().every(n => n.props.disabled));
 });
@@ -232,6 +232,11 @@ function harness(file, dependencies, window = {}) {
   const exports = {};
   new Function("require", "exports", "window", output)(name => {
     if (name === "react") return hooks;
+    if (name === "./SyncPanel") return { SyncPanel() {} };
+    if (name === "./sync/calendar-data") return {
+      ...dependencies["./events"], ...dependencies["./labels"], ...dependencies["./dinners"], ...(dependencies["./rollCall"] ?? rollCall),
+      commit(action, saved, failed) { try { saved(action()); } catch (error) { failed(error); } },
+    };
     if (name === "./DinnerRoster") return { DinnerRoster() {} };
     if (name === "./DinnerRollCall") return { DinnerRollCall() {} };
     if (name in dependencies) return dependencies[name];
@@ -263,25 +268,6 @@ const section = (tree, heading) => nodes(tree, node => node.props["aria-labelled
 const field = (tree, label) => nodes(nodes(tree, node => node.type === "label" && text(node).startsWith(label))[0], node => ["input", "select", "textarea"].includes(node.type))[0];
 const change = (control, value) => control.props.onChange({ target: { value } });
 const submit = tree => nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
-
-test("export action is explicit, accessible and reports download or failure without storage writes", () => {
-  const f = fixture([{ id: "saved", title: "Saved", date: "2024-01-01", recurrence: { frequency: "Daily" } }]);
-  let calls = 0;
-  f.dependencies["./backup"].downloadBackup = () => { calls++; };
-  const app = f.app();
-  const before = f.storage.getItem(events.EVENTS_STORAGE_KEY);
-  const action = button(app.render(), "Export backup");
-  assert.equal(calls, 0);
-  assert.equal(action.props.type, "button");
-  action.props.onClick();
-  assert.equal(calls, 1);
-  assert.ok(nodes(app.render(), node => node.props.role === "status" && text(node).includes("download requested")).length);
-  f.dependencies["./backup"].downloadBackup = () => { throw new Error("denied"); };
-  button(app.render(), "Export backup").props.onClick();
-  assert.ok(nodes(app.render(), node => node.props.role === "alert" && text(node).includes("Saved data was not changed")).length);
-  assert.equal(f.writes(), 0);
-  assert.equal(f.storage.getItem(events.EVENTS_STORAGE_KEY), before);
-});
 
 test("monthly dates cover aligned Monday-first weeks, leap years, and year boundaries", () => {
   for (const [year, month, first, last, count] of [
@@ -632,11 +618,11 @@ test("label and event forms integrate notes, dropdown selection, color edits, re
   assert.ok(button(app.render(), "Edit New plan"));
   assert.equal(nodes(app.render(), node => node.props.className === "label-badge").length, 0);
   button(app.render(), "Edit New plan").props.onClick();
-  assert.equal(field(app.render(), "Person or category").props.value, "");
+  assert.equal(field(app.render(), "Person or category").props.value, category.id);
   assert.equal(field(app.render(), "Notes").props.value, "Revised\nNotes");
   submit(section(app.render(), "manage-events-heading"));
   const reloaded = events.createEventStore(() => f.storage).list();
-  assert.equal(reloaded.find(item => item.id === event.id).labelId, undefined);
+  assert.equal(reloaded.find(item => item.id === event.id).labelId, category.id);
   assert.deepEqual(reloaded.find(item => item.id === legacy.id), legacy);
 });
 
@@ -1263,11 +1249,11 @@ test("dinner form integration persists ingredients, navigates, reloads and remov
  app.unmount(); reload.unmount();
 });
 
-test("dinner backup includes exact dated plans and refuses corruption without writes", () => {
+test("dinner backup includes exact dated plans and preserves corruption without writes", () => {
  const plans = { "2026-11-10": { name: "? soup", notes: "Line one\nLine two", ingredients: [{ name: "?", amount: "2 cups" }] } };
  const storage = { getItem: key => key === dinners.DINNERS_STORAGE_KEY ? JSON.stringify(plans) : null };
- assert.deepEqual(JSON.parse(serializeBackup(storage)).dinners, plans);
- assert.throws(() => serializeBackup({ getItem: key => key === dinners.DINNERS_STORAGE_KEY ? "broken" : null }));
+ assert.deepEqual(JSON.parse(JSON.parse(serializeBackup(storage)).raw[dinners.DINNERS_STORAGE_KEY]), plans);
+ assert.equal(JSON.parse(serializeBackup({ getItem: key => key === dinners.DINNERS_STORAGE_KEY ? "broken" : null })).raw[dinners.DINNERS_STORAGE_KEY], "broken");
 });
 
 test("ingredient text accepts commas, newlines, quantities and rejects missing names", () => {
@@ -1366,20 +1352,18 @@ test("multiweek dinner journey reloads independently and exports versioned compl
  button(app.render(), "Next dinner week").props.onClick();
  assert.match(text(app.render()), /Next week/); assert.equal(box().props.checked, true);
  const before = [...values]; const payload = JSON.parse(serializeBackup(storage));
- assert.equal(payload.version, 2);
- assert.deepEqual(payload.events, ordinary); assert.deepEqual(payload.labels, savedLabels);
- assert.deepEqual(payload.dinners, meals.list());
- assert.deepEqual(payload.groceries, { [dates[0]]: ["rice"], [next]: ["rice"] });
- assert.equal(payload.dinners[dates[1]], undefined); assert.deepEqual([...values], before);
+ assert.equal(payload.version, 3);
+ assert.deepEqual(JSON.parse(payload.raw[events.EVENTS_STORAGE_KEY]), ordinary); assert.deepEqual(JSON.parse(payload.raw[labels.LABELS_STORAGE_KEY]), savedLabels);
+ assert.deepEqual(JSON.parse(payload.raw[dinners.DINNERS_STORAGE_KEY]), meals.list());
+ assert.deepEqual(JSON.parse(payload.raw[dinners.GROCERIES_STORAGE_KEY]), { [dates[0]]: ["rice"], [next]: ["rice"] });
+ assert.equal(JSON.parse(payload.raw[dinners.DINNERS_STORAGE_KEY])[dates[1]], undefined); assert.deepEqual([...values], before);
  app.unmount();
 });
 
-test("v2 backup handles grocery-only storage and rejects corrupt checks without partial output or writes", () => {
- const raw = '{"2026-12-28":["rice","obsolete"]}';
- assert.deepEqual(JSON.parse(serializeBackup({ getItem: key => key === dinners.GROCERIES_STORAGE_KEY ? raw : null })), {
-  format: "family-calendar-backup", version: 2, events: [], labels: [], dinners: {}, groceries: { "2026-12-28": ["rice", "obsolete"] }
- });
- for (const raw of ["broken", "[]", '{"2026-12-29":["rice"]}', '{"2026-12-28":["Rice"]}', '{"2026-12-28":[3]}']) {
-  assert.throws(() => serializeBackup({ getItem: key => key === dinners.GROCERIES_STORAGE_KEY ? raw : null }));
+test("raw backup preserves grocery-only storage, obsolete keys and malformed values", () => {
+ for (const raw of ['{"2026-12-28":["rice","obsolete"]}', "broken", "[]", '{"2026-12-29":["rice"]}', '{"2026-12-28":["Rice"]}', '{"2026-12-28":[3]}']) {
+   const file = JSON.parse(serializeBackup({ getItem: key => key === dinners.GROCERIES_STORAGE_KEY ? raw : null }));
+   assert.equal(file.raw[dinners.GROCERIES_STORAGE_KEY], raw);
+   assert.equal(file.raw[dinners.DINNERS_STORAGE_KEY], null);
  }
 });

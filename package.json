@@ -18,8 +18,10 @@
   "private": true,
   "scripts": {
     "test": "node --experimental-strip-types --test --test-isolation=none src/events.test.mjs src/app.test.mjs",
-    "build": "pnpm run typecheck && node --preserve-symlinks --preserve-symlinks-main studio-tools/vite-build.mjs",
+    "build": "pnpm run typecheck && node --preserve-symlinks --preserve-symlinks-main studio-tools/vite-build.mjs && node studio-tools/offline-shell.mjs",
+    "test:sync": "pnpm run build && node --test tests/sync-browser.test.mjs",
     "dev": "vite --host 127.0.0.1",
+    "dev:sync": "pnpm run build && node tests/local-service.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
   },
   "type": "module",

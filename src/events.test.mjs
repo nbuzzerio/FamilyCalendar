@@ -15,17 +15,19 @@ test("backup deterministically preserves complete stored schema, Unicode, duplic
   const json = serializeBackup(storage);
   assert.equal(serializeBackup(storage), json);
   const payload = JSON.parse(json);
-  assert.deepEqual(payload, { format: "family-calendar-backup", version: 1, events, labels });
+  assert.equal(payload.version, 3); assert.equal(payload.format, "family-calendar-backup");
+  assert.equal(payload.raw[EVENTS_STORAGE_KEY], saved.get(EVENTS_STORAGE_KEY));
+  assert.equal(payload.raw[LABELS_STORAGE_KEY], saved.get(LABELS_STORAGE_KEY));
   assert.deepEqual([...saved], before);
   assert.deepEqual(createEventStore(() => storage).list(), createEventStore(() => ({ getItem: key => new Map(before).get(key) })).list());
-  assert.equal(payload.events.length, 7); // No occurrence expansion or duplicate filtering.
-  assert.deepEqual(JSON.parse(serializeBackup({ getItem: () => null })).events, []);
+  assert.equal(JSON.parse(payload.raw[EVENTS_STORAGE_KEY]).length, 7); // No occurrence expansion or duplicate filtering.
+  assert.equal(JSON.parse(serializeBackup({ getItem: () => null })).raw[EVENTS_STORAGE_KEY], null);
 });
 
-test("backup refuses malformed or unavailable storage rather than silently losing records", () => {
+test("backup retains malformed bytes and reports unavailable storage", () => {
   for (const raw of ["{", "null", "{}", "[null]", '[{"id":"x","title":"X","date":"2024-01-01","notes":42}]']) {
     for (const key of [EVENTS_STORAGE_KEY, LABELS_STORAGE_KEY]) {
-      assert.throws(() => serializeBackup({ getItem: requested => requested === key ? raw : null }));
+      assert.equal(JSON.parse(serializeBackup({ getItem: requested => requested === key ? raw : null })).raw[key], raw);
     }
   }
   assert.throws(() => serializeBackup({ getItem() { throw new Error("denied"); } }), /denied/);
@@ -43,13 +45,13 @@ test("download creates a JSON file only on invocation and cleans up its link and
     downloadBackup({ getItem: () => null });
     assert.equal(clicked, 1);
     assert.equal(removed, 1);
-    assert.equal(link.download, "family-calendar-backup-v1.json");
+    assert.equal(link.download, "family-calendar-backup-v3.json");
     assert.equal(blob.type, "application/json;charset=utf-8");
-    assert.equal(JSON.parse(await blob.text()).version, 1);
+    assert.equal(JSON.parse(await blob.text()).version, 3);
     downloadBackup({ getItem: key => key === "family-calendar.groceries.v1" ? "{}" : null });
     assert.equal(clicked, 2); assert.equal(removed, 2);
-    assert.equal(link.download, "family-calendar-backup-v2.json");
-    assert.deepEqual(JSON.parse(await blob.text()), { format: "family-calendar-backup", version: 2, events: [], labels: [], dinners: {}, groceries: {} });
+    assert.equal(link.download, "family-calendar-backup-v3.json");
+    assert.equal(JSON.parse(await blob.text()).raw["family-calendar.groceries.v1"], "{}");
     await new Promise(resolve => setTimeout(resolve, 1100));
     assert.equal(revoked, 2);
   } finally { globalThis.document = previous; URL.createObjectURL = create; URL.revokeObjectURL = revoke; }

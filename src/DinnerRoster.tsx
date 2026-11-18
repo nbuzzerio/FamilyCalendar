@@ -4,7 +4,9 @@ import { weekDays } from "./calendar";
 import { availabilityFor, type RollCall } from "./rollCall";
 import { DinnerRollCall } from "./DinnerRollCall";
 import type { CalendarLabel } from "./labels";
-import { dinnerStore, groceryStore, groceryItems, parseIngredients, formatIngredients, type DinnerPlans, type GroceryChecks } from "./dinners";
+import { type Dinner, groceryItems, parseIngredients, formatIngredients, type DinnerPlans, type GroceryChecks } from "./dinners";
+
+import { dinnerStore, groceryStore, commit } from "./sync/calendar-data";
 
 export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
   const [availability, setAvailability] = useState<RollCall | null>(null);
@@ -12,6 +14,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
   const [anchor, setAnchor] = useState(() => new Date());
   const [plans, setPlans] = useState<DinnerPlans>({});
   const [checks, setChecks] = useState<GroceryChecks>({});
+  const [savingChecks, setSavingChecks] = useState<Record<string, boolean>>({});
   const [groceryError, setGroceryError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -23,6 +26,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
   const [nameError, setNameError] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const original = useRef<Dinner | null>(null);
   function refresh() {
     try {
       const saved = dinnerStore.list(); setPlans(saved); setError("");
@@ -31,7 +35,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
     }
     catch (error) { setError((error as Error).message); }
   }
-  useEffect(() => { refresh(); window.addEventListener("storage", refresh); return () => window.removeEventListener("storage", refresh); }, []);
+  useEffect(() => { refresh(); window.addEventListener("calendar-update", refresh); return () => window.removeEventListener("calendar-update", refresh); }, []);
   useEffect(() => {
     if (editing) { nameInput.current?.focus(); nameInput.current?.scrollIntoView({ block: "nearest" }); }
     else trigger.current?.focus();
@@ -43,7 +47,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
   function move(offset: number) { setAnchor(weekDays(anchor, offset)[0]); setNotice(""); }
   return <section className="dinner-roster" aria-labelledby="dinner-heading">
     <h2 id="dinner-heading">Dinner Roster</h2>
-    <p>Plan dinner for each date. Plans stay on this browser.</p>
+    <p>Plan dinner for each date.</p>
     <p aria-live="polite">{dateKey(days[0])} – {dateKey(days[6])}</p>
     <nav className="week-navigation" aria-label="Dinner week navigation">
       <button type="button" disabled={!!editing} onClick={() => move(-1)}>Previous dinner week</button>
@@ -59,7 +63,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
         {dinner ? <><h4>{dinner.name}</h4>{dinner.cook && <p>Cook: {dinner.cook}</p>}{dinner.notes && <p className="dinner-notes">{dinner.notes}</p>}
           {dinner.ingredients.length > 0 && <ul>{dinner.ingredients.map((item, index) => <li key={index}>{item.name}{item.amount ? ` — ${item.amount}` : ""}</li>)}</ul>}</> : <p>{error ? "Dinner plans unavailable" : "No dinner planned"}</p>}
         <button type="button" disabled={!!editing} aria-label={`${dinner ? "Edit" : "Plan"} dinner for ${key}`} onClick={event => {
-          trigger.current = event.currentTarget; setEditing(key); setName(dinner?.name ?? ""); setCook(dinner?.cook ?? ""); setNotes(dinner?.notes ?? ""); setIngredients(formatIngredients(dinner?.ingredients ?? [])); setNotice(""); setNameError(false); setError("");
+          original.current = dinner ?? null; trigger.current = event.currentTarget; setEditing(key); setName(dinner?.name ?? ""); setCook(dinner?.cook ?? ""); setNotes(dinner?.notes ?? ""); setIngredients(formatIngredients(dinner?.ingredients ?? [])); setNotice(""); setNameError(false); setError("");
         }}>{dinner ? "Edit dinner" : "Plan dinner"}</button>
         <p className="dinner-availability" aria-live="polite" aria-atomic="true">{availability === null ? "Availability unavailable" : `${people.filter(person => availabilityFor(availability, key, person.id) === "Available").length} of ${people.length} available`}</p>
       </li>;
@@ -71,12 +75,14 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
       {groceryError && <p role="alert">{groceryError}</p>}
       {error ? <p>Grocery checklist unavailable until dinner plans can be read.</p> : groceries.length ? <ul>{groceries.map(item =>
         <li key={item.key}>
-          <label><input type="checkbox" checked={(checks[week] ?? []).includes(item.key)} disabled={!!groceryError} onChange={event => {
-            try {
-              const saved = dinnerStore.list();
-              setChecks(groceryStore.setChecked(saved, week, item.key, event.target.checked));
-              setGroceryError("");
-            } catch { setGroceryError("Grocery checkmark could not be saved. Saved dinners are unchanged. Reload to retry."); }
+          <label><input type="checkbox" checked={savingChecks[week + ":" + item.key] ?? (checks[week] ?? []).includes(item.key)} disabled={!!groceryError || Object.hasOwn(savingChecks, week + ":" + item.key)} onChange={event => {
+            const checked = event.target.checked;
+            const id = week + ":" + item.key;
+            setSavingChecks(prior => ({ ...prior, [id]: checked }));
+            const finish = () => setSavingChecks(prior => { const next = { ...prior }; delete next[id]; return next; });
+            commit(() => groceryStore.setChecked(dinnerStore.list(), week, item.key, checked), next => {
+              setChecks(next); setGroceryError(""); finish();
+            }, () => { finish(); setGroceryError("Grocery checkmark could not be saved. Saved dinners are unchanged. Reload to retry."); });
           }} /> {item.name}<span className="visually-hidden"> for dinner week {week}</span></label>
           <ul>{item.entries.map((entry, index) => <li key={index}><time dateTime={entry.date}>{entry.date}</time>: {entry.amount}</li>)}</ul>
         </li>)}</ul> : <p>No groceries for this week. Add ingredients to a dinner to start your checklist.</p>}
@@ -85,8 +91,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
       event.preventDefault();
       if (!name.trim()) { setNameError(true); setError("Enter a dinner name."); nameInput.current?.focus(); return; }
       setNameError(false);
-      try { dinnerStore.save(editing, { name: name.trim(), ...(cook.trim() ? { cook: cook.trim() } : {}), ...(notes.trim() ? { notes } : {}), ingredients: ingredients === formatIngredients(plans[editing]?.ingredients ?? []) ? plans[editing]?.ingredients ?? [] : parseIngredients(ingredients) }); refresh(); setNotice(`Dinner saved for ${editing}: ${name.trim()}.`); close(); }
-      catch { setError("Dinner could not be saved. Check the name, ingredients and browser storage. Saved data has been left unchanged."); }
+      commit(() => dinnerStore.save(editing, { name: name.trim(), ...(cook.trim() ? { cook: cook.trim() } : {}), ...(notes.trim() ? { notes } : {}), ingredients: ingredients === formatIngredients(original.current?.ingredients ?? []) ? original.current?.ingredients ?? [] : parseIngredients(ingredients) }, original.current), () => { refresh(); setNotice(`Dinner saved for ${editing}: ${name.trim()}.`); close(); }, error => setError("Dinner could not be saved. " + error.message));
     }}>
       <h3>Dinner for {editing}</h3>
       <p>Save or cancel this dinner before choosing another date or week. Escape cancels.</p>
@@ -99,8 +104,7 @@ export function DinnerRoster({ labels = [] }: { labels?: CalendarLabel[] }) {
       <div className="week-navigation"><button type="submit">Save dinner</button><button type="button" onClick={close}>Cancel dinner</button>
         {plans[editing] && <button type="button" onClick={() => {
           if (!window.confirm(`Remove dinner for ${editing}?`)) return;
-          try { dinnerStore.save(editing, null); refresh(); setNotice(`Dinner removed for ${editing}.`); close(); }
-          catch { setError("Dinner could not be removed. Saved data has been left unchanged."); }
+          commit(() => dinnerStore.save(editing, null, original.current), () => { refresh(); setNotice(`Dinner removed for ${editing}.`); close(); }, error => setError("Dinner could not be removed. " + error.message));
         }}>Remove dinner</button>}</div>
     </form>}
   </section>;
